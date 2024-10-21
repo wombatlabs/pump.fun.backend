@@ -1,8 +1,10 @@
 import { UserAccount } from './user-account.entity';
+import { Token } from './token.entity';
 
 const entities = [
-  UserAccount
+  UserAccount,
+  Token
 ];
 
-export { UserAccount };
+export { UserAccount, Token };
 export default entities;
