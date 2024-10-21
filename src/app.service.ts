@@ -33,17 +33,46 @@ export class AppService {
         this.logger.log(`App service started`)
     }
 
-    private async addNewToken(address: string, pairAddress: string, amount: string) {
+    private async addNewToken(
+      address: string,
+      pairAddress: string,
+      amount: string,
+      txHash: string,
+      blockNumber: string,
+    ) {
         await this.dataSource.manager.insert(Token, {
             address,
             pairAddress,
-            amount
+            amount,
+            txHash,
+            blockNumber
         });
     }
 
+    private async getLatestIndexedToken() {
+        return await this.dataSource.manager.findOne(Token, {
+            where: {},
+            order: {
+                createdAt: 'desc'
+            }
+        })
+    }
+
     async eventsTrackingLoop(
-      fromBlockParam = +this.configService.get<number>('PUMP_FUN_INITIAL_BLOCK_NUMBER')
+      fromBlockParam?: number
     ) {
+        if(!fromBlockParam) {
+            const lastIndexedToken = await this.getLatestIndexedToken()
+            if(lastIndexedToken) {
+                fromBlockParam = +lastIndexedToken.blockNumber + 1
+                this.logger.log(`Starting from the last block from DB: ${fromBlockParam}`)
+            } else {
+                fromBlockParam = +this.configService.get<number>('PUMP_FUN_INITIAL_BLOCK_NUMBER')
+                this.logger.log(`Starting from the last block from config: ${fromBlockParam}`)
+            }
+
+        }
+
         let fromBlock = fromBlockParam
         let toBlock = fromBlock
         try {
@@ -65,11 +94,19 @@ export class AppService {
                     const tokenAddress = values['token'] as string
                     const pairAddress = values['pair'] as string
                     const amount = (values['2'] as bigint).toString() // TODO: add param name in the contract
-                    await this.addNewToken(tokenAddress, pairAddress, amount)
+
+                    await this.addNewToken(
+                      tokenAddress,
+                      pairAddress,
+                      amount,
+                      event.transactionHash,
+                      String(event.blockNumber)
+                    )
+
                     this.logger.log(`Added new token: address=${tokenAddress}, pair=${pairAddress}, amount=${amount}`)
                 }
 
-                this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), events: ${events.length}`)
+                this.logger.log(`[${fromBlock} - ${toBlock}] (${((toBlock - fromBlock + 1))} blocks), events: ${events.length}`)
                 toBlock += 1
             } else {
                 // wait for blockchain

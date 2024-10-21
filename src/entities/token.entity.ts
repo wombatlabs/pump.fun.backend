@@ -29,6 +29,14 @@ export class Token {
   amount: string;
 
   @ApiProperty()
+  @Column()
+  txHash: string;
+
+  @ApiProperty()
+  @Column()
+  blockNumber: string;
+
+  @ApiProperty()
   @CreateDateColumn({ name: 'createdAt' })
   createdAt: Date;
 
