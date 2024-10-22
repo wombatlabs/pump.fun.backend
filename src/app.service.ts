@@ -4,6 +4,9 @@ import {Contract, ContractAbi, EventLog, Web3} from "web3";
 import * as PumpFunABI from '../abi/PumpFunABI.json'
 import {DataSource} from "typeorm";
 import {Token} from "./entities";
+import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
+import {Comment} from "./entities/comment.entity";
+import {GetTokensDto} from "./dto/token.dto";
 
 @Injectable()
 export class AppService {
@@ -111,13 +114,57 @@ export class AppService {
             } else {
                 // wait for blockchain
                 toBlock = fromBlockParam
-                await new Promise(resolve => setTimeout(resolve, 5 * 1000));
+                await new Promise(resolve => setTimeout(resolve, 5 * 60 * 1000));
             }
         } catch (e) {
             toBlock = fromBlockParam
             this.logger.error(`[${fromBlock}-${toBlock}] Failed to process:`, e)
-            await new Promise(resolve => setTimeout(resolve, 30 * 1000));
+            await new Promise(resolve => setTimeout(resolve, 5 * 60 * 1000));
         }
         this.eventsTrackingLoop(toBlock)
+    }
+
+    async getComments(dto: GetCommentsDto){
+        return await this.dataSource.manager.find(Comment, {
+            where: {
+                token: {
+                    id: dto.tokenId
+                }
+            },
+            take: +dto.limit,
+            skip: +dto.offset,
+            order: {
+                createdAt: 'desc'
+            }
+        })
+    }
+
+    async getTokens(dto: GetTokensDto){
+        return await this.dataSource.manager.find(Token, {
+            where: {},
+            take: dto.limit,
+            skip: dto.offset,
+            order: {
+                createdAt: 'desc'
+            }
+        })
+    }
+
+    async getTokenById(tokenId: string){
+        return await this.dataSource.manager.findOne(Token, {
+            where: {
+                id: tokenId
+            }
+        })
+    }
+
+    async addComment(dto: AddCommentDto): Promise<string> {
+        const token = await this.getTokenById(dto.tokenId)
+        const comment = this.dataSource.manager.create(Comment, {
+            ...dto,
+            token
+        })
+        const { identifiers } = await this.dataSource.manager.insert(Comment, comment)
+        return identifiers[0].id
     }
 }

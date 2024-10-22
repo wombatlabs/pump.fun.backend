@@ -9,6 +9,7 @@ import {
   JoinTable
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
+import {Comment} from "./comment.entity";
 
 @Entity({ name: 'tokens' })
 export class Token {
@@ -35,6 +36,10 @@ export class Token {
   @ApiProperty()
   @Column()
   blockNumber: string;
+
+  @OneToMany(() => Comment, (comment) => comment.token, { eager: true })
+  @JoinTable()
+  comments: Comment[]
 
   @ApiProperty()
   @CreateDateColumn({ name: 'createdAt' })
