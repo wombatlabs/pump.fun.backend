@@ -7,6 +7,8 @@ import {Token} from "./entities";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {Comment} from "./entities/comment.entity";
 import {GetTokensDto} from "./dto/token.dto";
+import * as process from "node:process";
+import {Swap} from "./entities/swap.entity";
 
 @Injectable()
 export class AppService {
@@ -36,38 +38,32 @@ export class AppService {
         this.logger.log(`App service started`)
     }
 
-    private async addNewToken(
-      address: string,
-      pairAddress: string,
-      amount: string,
-      txHash: string,
-      blockNumber: string,
-    ) {
-        await this.dataSource.manager.insert(Token, {
-            address,
-            pairAddress,
-            amount,
-            txHash,
-            blockNumber
-        });
-    }
-
-    private async getLatestIndexedToken() {
-        return await this.dataSource.manager.findOne(Token, {
+    private async getLatestIndexedBlockNumber() {
+        const lastToken = await this.dataSource.manager.findOne(Token, {
             where: {},
             order: {
                 createdAt: 'desc'
             }
         })
+        const lastSwap = await this.dataSource.manager.findOne(Swap, {
+            where: {},
+            order: {
+                createdAt: 'desc'
+            }
+        })
+        if(lastToken || lastSwap) {
+           return Math.max(+lastToken?.blockNumber || 0, +lastSwap?.blockNumber || 0)
+        }
+        return 0
     }
 
     async eventsTrackingLoop(
       fromBlockParam?: number
     ) {
         if(!fromBlockParam) {
-            const lastIndexedToken = await this.getLatestIndexedToken()
-            if(lastIndexedToken) {
-                fromBlockParam = +lastIndexedToken.blockNumber + 1
+            const lastIndexedBlockNumber = await this.getLatestIndexedBlockNumber()
+            if(lastIndexedBlockNumber) {
+                fromBlockParam = lastIndexedBlockNumber + 1
                 this.logger.log(`Starting from the last block from DB: ${fromBlockParam}`)
             } else {
                 fromBlockParam = +this.configService.get<number>('PUMP_FUN_INITIAL_BLOCK_NUMBER')
@@ -86,39 +82,90 @@ export class AppService {
             }
 
             if(toBlock - fromBlock >= 1) {
-                const events = await this.pumpFunContract.getPastEvents('allEvents', {
+                const newTokenEvents = await this.pumpFunContract.getPastEvents('allEvents', {
                     fromBlock,
                     toBlock,
-                    topics: [this.web3.utils.sha3('Launched(address,address,uint256)')],
+                    topics: [
+                      this.web3.utils.sha3('Launched(address,address,uint256)'),
+                    ],
                 }) as EventLog[];
 
-                for(const event of events) {
+                const swapEvents = await this.pumpFunContract.getPastEvents('allEvents', {
+                    fromBlock,
+                    toBlock,
+                    topics: [
+                        this.web3.utils.sha3('SwapETHForTokens(address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)'),
+                    ],
+                }) as EventLog[];
+
+                for(const event of newTokenEvents) {
+                    const txnHash = event.transactionHash
                     const values = event.returnValues
                     const tokenAddress = values['token'] as string
                     const pairAddress = values['pair'] as string
                     const amount = (values['2'] as bigint).toString() // TODO: add param name in the contract
 
-                    await this.addNewToken(
-                      tokenAddress,
-                      pairAddress,
-                      amount,
-                      event.transactionHash,
-                      String(event.blockNumber)
-                    )
-
-                    this.logger.log(`Added new token: address=${tokenAddress}, pair=${pairAddress}, amount=${amount}`)
+                    await this.dataSource.manager.insert(Token, {
+                        txnHash,
+                        address: tokenAddress,
+                        pairAddress,
+                        amount,
+                        blockNumber: String(event.blockNumber)
+                    });
+                    this.logger.log(`Added new token: address=${tokenAddress}, pair=${pairAddress}, amount=${amount}, txnHash=${txnHash}`)
                 }
 
-                this.logger.log(`[${fromBlock} - ${toBlock}] (${((toBlock - fromBlock + 1))} blocks), events: ${events.length}`)
+                for(const event of swapEvents) {
+                    const txnHash = event.transactionHash
+                    const blockNumber = event.blockNumber.toString()
+                    const values = event.returnValues
+                    const tokenAddress = values['token'] as string
+                    const pairAddress = values['pair'] as string
+                    const amountIn = values['amount0In'] as string
+                    const amountOut = values['amount0Out'] as string
+                    const prevPrice = values['prevPrice'] as string
+                    const price = values['price'] as string
+                    const mCap = values['mCap'] as string
+                    const liquidity = values['liquidity'] as string
+                    const volume = values['volume'] as string
+                    const volume24H = values['volume24H'] as string
+
+                    const token = await this.getTokenByAddress(tokenAddress)
+                    if(!token) {
+                        this.logger.error(`swap event: failed to get token by address="${tokenAddress}", event tx hash="${event.transactionHash}", exit`)
+                        process.exit(1)
+                    }
+
+                    try {
+                        await this.dataSource.manager.insert(Swap, {
+                            txnHash,
+                            blockNumber,
+                            token,
+                            amountIn,
+                            amountOut,
+                            prevPrice,
+                            price,
+                            mCap,
+                            liquidity,
+                            volume,
+                            volume24H
+                        });
+                        this.logger.log(`Swap: token=${tokenAddress}, amountIn=${amountIn}, mCap=${mCap}, liquidity=${liquidity}, volume=${volume}, volume24H=${volume24H}`)
+                    } catch (e) {
+                        this.logger.error(`Failed to process swap token=${tokenAddress} txnHash=${txnHash}`, e)
+                        throw new Error(e);
+                    }
+                }
+                this.logger.log(`[${fromBlock} - ${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens: ${newTokenEvents.length}, swaps: ${swapEvents.length}`)
                 toBlock += 1
             } else {
-                // wait for blockchain
+                // Wait for blockchain
                 toBlock = fromBlockParam
                 await new Promise(resolve => setTimeout(resolve, 5 * 60 * 1000));
             }
         } catch (e) {
             toBlock = fromBlockParam
-            this.logger.error(`[${fromBlock}-${toBlock}] Failed to process:`, e)
+            this.logger.error(`[${fromBlock} - ${toBlock}] Failed to index blocks range:`, e)
             await new Promise(resolve => setTimeout(resolve, 5 * 60 * 1000));
         }
         this.eventsTrackingLoop(toBlock)
@@ -146,6 +193,14 @@ export class AppService {
             skip: dto.offset,
             order: {
                 createdAt: 'desc'
+            }
+        })
+    }
+
+    async getTokenByAddress(address: string){
+        return await this.dataSource.manager.findOne(Token, {
+            where: {
+                address
             }
         })
     }

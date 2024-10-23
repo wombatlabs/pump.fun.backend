@@ -19,6 +19,14 @@ export class Token {
 
   @ApiProperty()
   @Column({ unique: true })
+  txnHash: string;
+
+  @ApiProperty()
+  @Column({ type: 'bigint' })
+  blockNumber: string;
+
+  @ApiProperty()
+  @Column({ unique: true })
   address: string;
 
   @ApiProperty()
@@ -28,14 +36,6 @@ export class Token {
   @ApiProperty()
   @Column()
   amount: string;
-
-  @ApiProperty()
-  @Column()
-  txHash: string;
-
-  @ApiProperty()
-  @Column()
-  blockNumber: string;
 
   @OneToMany(() => Comment, (comment) => comment.token, { eager: true })
   @JoinTable()
