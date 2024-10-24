@@ -5,6 +5,7 @@ import {SkipThrottle} from "@nestjs/throttler";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {AppService} from "./app.service";
 import {GetTokensDto} from "./dto/token.dto";
+import {GetSwapsDto} from "./dto/swap.dto";
 
 @SkipThrottle()
 @ApiTags('app')
@@ -41,5 +42,10 @@ export class AppController {
       throw new NotFoundException('Token not found')
     }
     return await this.appService.addComment(dto)
+  }
+
+  @Get('/swaps')
+  getSwaps(@Query() dto: GetSwapsDto) {
+    return this.appService.getSwaps(dto)
   }
 }

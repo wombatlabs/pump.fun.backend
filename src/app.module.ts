@@ -8,9 +8,11 @@ import configuration from './config';
 import { typeormConfig } from './config/typeorm';
 import {ThrottlerGuard, ThrottlerModule} from "@nestjs/throttler";
 import {APP_GUARD} from "@nestjs/core";
+import {ScheduleModule} from "@nestjs/schedule";
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       load: [typeormConfig, configuration],

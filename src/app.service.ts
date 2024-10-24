@@ -2,13 +2,16 @@ import {Injectable, Logger} from '@nestjs/common';
 import {ConfigService} from "@nestjs/config";
 import {Contract, ContractAbi, EventLog, Web3} from "web3";
 import * as PumpFunABI from '../abi/PumpFunABI.json'
-import {DataSource} from "typeorm";
+import {DataSource, Between} from "typeorm";
 import {Token} from "./entities";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {Comment} from "./entities/comment.entity";
 import {GetTokensDto} from "./dto/token.dto";
 import * as process from "node:process";
 import {Swap} from "./entities/swap.entity";
+import {GetSwapsDto} from "./dto/swap.dto";
+import {Cron, CronExpression} from "@nestjs/schedule";
+import * as moment from "moment";
 
 @Injectable()
 export class AppService {
@@ -197,6 +200,21 @@ export class AppService {
         })
     }
 
+    async getSwaps(dto: GetSwapsDto){
+        return await this.dataSource.manager.find(Swap, {
+            where: {
+                token: {
+                    id: dto.tokenId
+                }
+            },
+            take: dto.limit,
+            skip: dto.offset,
+            order: {
+                createdAt: 'desc'
+            }
+        })
+    }
+
     async getTokenByAddress(address: string){
         return await this.dataSource.manager.findOne(Token, {
             where: {
@@ -221,5 +239,49 @@ export class AppService {
         })
         const { identifiers } = await this.dataSource.manager.insert(Comment, comment)
         return identifiers[0].id
+    }
+
+    // '0 0 * * * *'
+    @Cron(CronExpression.EVERY_5_SECONDS)
+    async handleCron() {
+        const totalAttempts = 3
+        for(let i = 0; i < totalAttempts; i++) {
+            try {
+                const winnerTokenId = await this.getDailyWinnerToKenId()
+                this.logger.log(`Daily winner tokenId: ${winnerTokenId}`)
+                break;
+            } catch (e) {
+                this.logger.error(`Failed to get daily winner, attempt: ${i+1}/${totalAttempts}`, e)
+            }
+        }
+    }
+
+    async getDailyWinnerToKenId(): Promise<string | null> {
+        const dateStart = moment().subtract(1, 'days').startOf('day')
+        const dateEnd = moment().subtract(1, 'day').endOf('day')
+
+        const tokensMap = new Map<string, bigint>()
+        const tokens = await this.getTokens({ offset: 0, limit: 1000 })
+        for(const token of tokens) {
+            const tokenSwaps = await this.dataSource.manager.find(Swap, {
+                where: {
+                    token: {
+                        id: token.id
+                    },
+                    createdAt: Between(dateStart.toDate(), dateEnd.toDate())
+                }
+            })
+            const totalAmount = tokenSwaps.reduce((acc, item) => acc += BigInt(item.volume), 0n)
+            tokensMap.set(token.id, totalAmount)
+        }
+        const sortedMapArray = ([...tokensMap.entries()]
+          .sort(([aKey, aValue], [bKey, bValue]) => {
+            return aValue - bValue > 0 ? -1 : 1
+        }));
+        if(sortedMapArray.length > 0) {
+            const [winnerTokenId] = sortedMapArray[0]
+            return winnerTokenId
+        }
+        return null
     }
 }
