@@ -46,6 +46,6 @@ export class AppController {
 
   @Get('/swaps')
   getSwaps(@Query() dto: GetSwapsDto) {
-    return this.appService.getSwaps(dto)
+    return this.appService.getTrades(dto)
   }
 }

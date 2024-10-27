@@ -8,8 +8,13 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 import {Token} from "./token.entity";
 
-@Entity({ name: 'swaps' })
-export class Swap {
+export enum TradeType {
+  buy = 'buy',
+  sell = 'sell'
+}
+
+@Entity({ name: 'trades' })
+export class Trade {
   @ApiProperty()
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -21,6 +26,10 @@ export class Swap {
   @ApiProperty()
   @Column({ type: 'bigint' })
   blockNumber: string;
+
+  @ApiProperty()
+  @Column({ type: 'enum', enum: TradeType })
+  type: TradeType;
 
   @ManyToOne(() => Token, (token) => token.comments)
   token: Token
@@ -35,27 +44,11 @@ export class Swap {
 
   @ApiProperty()
   @Column({ type: 'decimal' })
-  prevPrice: string;
+  fee: string;
 
   @ApiProperty()
-  @Column({ type: 'decimal' })
-  price: string;
-
-  @ApiProperty()
-  @Column({ type: 'decimal' })
-  mCap: string;
-
-  @ApiProperty()
-  @Column({ type: 'decimal' })
-  liquidity: string;
-
-  @ApiProperty()
-  @Column({ type: 'decimal' })
-  volume: string;
-
-  @ApiProperty()
-  @Column({ type: 'decimal' })
-  volume24H: string;
+  @Column({ type: 'bigint' })
+  timestamp: number;
 
   @ApiProperty()
   @CreateDateColumn({ name: 'createdAt' })

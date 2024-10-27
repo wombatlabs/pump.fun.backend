@@ -30,12 +30,8 @@ export class Token {
   address: string;
 
   @ApiProperty()
-  @Column()
-  pairAddress: string;
-
-  @ApiProperty()
-  @Column()
-  amount: string;
+  @Column({ type: 'bigint' })
+  timestamp: number;
 
   @OneToMany(() => Comment, (comment) => comment.token, { eager: true })
   @JoinTable()

@@ -1,14 +1,14 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {ConfigService} from "@nestjs/config";
 import {Contract, ContractAbi, EventLog, Web3} from "web3";
-import * as PumpFunABI from '../abi/PumpFunABI.json'
-import {DataSource, Between} from "typeorm";
+import * as TokenFactoryABI from '../abi/TokenFactory.json'
+import {Between, DataSource} from "typeorm";
 import {Token} from "./entities";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {Comment} from "./entities/comment.entity";
 import {GetTokensDto} from "./dto/token.dto";
 import * as process from "node:process";
-import {Swap} from "./entities/swap.entity";
+import {Trade, TradeType} from "./entities/trade.entity";
 import {GetSwapsDto} from "./dto/swap.dto";
 import {Cron, CronExpression} from "@nestjs/schedule";
 import * as moment from "moment";
@@ -17,7 +17,7 @@ import * as moment from "moment";
 export class AppService {
     private readonly logger = new Logger(AppService.name);
     private readonly web3: Web3
-    private readonly pumpFunContract: Contract<ContractAbi>
+    private readonly tokenFactoryContract: Contract<ContractAbi>
     private readonly blocksIndexingRange = 1000
     constructor(
       private configService: ConfigService,
@@ -36,9 +36,45 @@ export class AppService {
         }`)
 
         this.web3 = new Web3(rpcUrl);
-        this.pumpFunContract = new this.web3.eth.Contract(PumpFunABI, contractAddress);
+        this.tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, contractAddress);
         this.eventsTrackingLoop()
         this.logger.log(`App service started`)
+    }
+
+    private async processTradeEvents(events: EventLog[], tradeType: TradeType) {
+        for(const event of events) {
+            const txnHash = event.transactionHash
+            const blockNumber = event.blockNumber.toString()
+            const values = event.returnValues
+            const tokenAddress = values['token'] as string
+            const amountIn = String(values['amount0In'] as bigint)
+            const amountOut = String(values['amount0Out'] as bigint)
+            const fee = String(values['fee'] as bigint)
+            const timestamp = Number(values['timestamp'] as bigint)
+
+            const token = await this.getTokenByAddress(tokenAddress)
+            if(!token) {
+                this.logger.error(`swap event: failed to get token by address="${tokenAddress}", event tx hash="${event.transactionHash}", exit`)
+                process.exit(1)
+            }
+
+            try {
+                await this.dataSource.manager.insert(Trade, {
+                    type: tradeType,
+                    txnHash,
+                    blockNumber,
+                    token,
+                    amountIn,
+                    amountOut,
+                    fee,
+                    timestamp
+                });
+                this.logger.log(`Swap: token=${tokenAddress}, amountIn=${amountIn}`)
+            } catch (e) {
+                this.logger.error(`Failed to process swap token=${tokenAddress} txnHash=${txnHash}`, e)
+                throw new Error(e);
+            }
+        }
     }
 
     private async getLatestIndexedBlockNumber() {
@@ -48,14 +84,14 @@ export class AppService {
                 createdAt: 'desc'
             }
         })
-        const lastSwap = await this.dataSource.manager.findOne(Swap, {
+        const lastTrade = await this.dataSource.manager.findOne(Trade, {
             where: {},
             order: {
                 createdAt: 'desc'
             }
         })
-        if(lastToken || lastSwap) {
-           return Math.max(+lastToken?.blockNumber || 0, +lastSwap?.blockNumber || 0)
+        if(lastToken || lastTrade) {
+           return Math.max(+lastToken?.blockNumber || 0, +lastTrade?.blockNumber || 0)
         }
         return 0
     }
@@ -85,81 +121,49 @@ export class AppService {
             }
 
             if(toBlock - fromBlock >= 1) {
-                const newTokenEvents = await this.pumpFunContract.getPastEvents('allEvents', {
+                const tokenCreatedEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
                     fromBlock,
                     toBlock,
                     topics: [
-                      this.web3.utils.sha3('Launched(address,address,uint256)'),
+                      this.web3.utils.sha3('TokenCreated(address,uint256)'),
                     ],
                 }) as EventLog[];
 
-                const swapEvents = await this.pumpFunContract.getPastEvents('allEvents', {
+                const buyEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
                     fromBlock,
                     toBlock,
                     topics: [
-                        this.web3.utils.sha3('SwapETHForTokens(address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)'),
+                        this.web3.utils.sha3('TokenBuy(address,uint256,uint256,uint256,uint256)'),
                     ],
                 }) as EventLog[];
 
-                for(const event of newTokenEvents) {
-                    const txnHash = event.transactionHash
-                    const values = event.returnValues
+                const sellEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
+                    fromBlock,
+                    toBlock,
+                    topics: [
+                        this.web3.utils.sha3('TokenSell(address,uint256,uint256,uint256,uint256)'),
+                    ],
+                }) as EventLog[];
+
+                for(const tokenCreated of tokenCreatedEvents) {
+                    const txnHash = tokenCreated.transactionHash
+                    const values = tokenCreated.returnValues
                     const tokenAddress = values['token'] as string
-                    const pairAddress = values['pair'] as string
-                    const amount = (values['2'] as bigint).toString() // TODO: add param name in the contract
+                    const timestamp = Number(values['timestamp'] as bigint)
 
                     await this.dataSource.manager.insert(Token, {
                         txnHash,
                         address: tokenAddress,
-                        pairAddress,
-                        amount,
-                        blockNumber: String(event.blockNumber)
+                        blockNumber: String(tokenCreated.blockNumber),
+                        timestamp
                     });
-                    this.logger.log(`Added new token: address=${tokenAddress}, pair=${pairAddress}, amount=${amount}, txnHash=${txnHash}`)
+                    this.logger.log(`Added new token: address=${tokenAddress}, txnHash=${txnHash}, timestamp=${timestamp}`)
                 }
 
-                for(const event of swapEvents) {
-                    const txnHash = event.transactionHash
-                    const blockNumber = event.blockNumber.toString()
-                    const values = event.returnValues
-                    const tokenAddress = values['token'] as string
-                    const pairAddress = values['pair'] as string
-                    const amountIn = values['amount0In'] as string
-                    const amountOut = values['amount0Out'] as string
-                    const prevPrice = values['prevPrice'] as string
-                    const price = values['price'] as string
-                    const mCap = values['mCap'] as string
-                    const liquidity = values['liquidity'] as string
-                    const volume = values['volume'] as string
-                    const volume24H = values['volume24H'] as string
+                await this.processTradeEvents(buyEvents, TradeType.buy)
+                await this.processTradeEvents(sellEvents, TradeType.sell)
 
-                    const token = await this.getTokenByAddress(tokenAddress)
-                    if(!token) {
-                        this.logger.error(`swap event: failed to get token by address="${tokenAddress}", event tx hash="${event.transactionHash}", exit`)
-                        process.exit(1)
-                    }
-
-                    try {
-                        await this.dataSource.manager.insert(Swap, {
-                            txnHash,
-                            blockNumber,
-                            token,
-                            amountIn,
-                            amountOut,
-                            prevPrice,
-                            price,
-                            mCap,
-                            liquidity,
-                            volume,
-                            volume24H
-                        });
-                        this.logger.log(`Swap: token=${tokenAddress}, amountIn=${amountIn}, mCap=${mCap}, liquidity=${liquidity}, volume=${volume}, volume24H=${volume24H}`)
-                    } catch (e) {
-                        this.logger.error(`Failed to process swap token=${tokenAddress} txnHash=${txnHash}`, e)
-                        throw new Error(e);
-                    }
-                }
-                this.logger.log(`[${fromBlock} - ${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens: ${newTokenEvents.length}, swaps: ${swapEvents.length}`)
+                this.logger.log(`[${fromBlock} - ${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens=${tokenCreatedEvents.length}, trade=${[...buyEvents, ...sellEvents].length} (buy=${buyEvents.length}, sell=${sellEvents.length})`)
                 toBlock += 1
             } else {
                 // Wait for blockchain
@@ -200,8 +204,8 @@ export class AppService {
         })
     }
 
-    async getSwaps(dto: GetSwapsDto){
-        return await this.dataSource.manager.find(Swap, {
+    async getTrades(dto: GetSwapsDto){
+        return await this.dataSource.manager.find(Trade, {
             where: {
                 token: {
                     id: dto.tokenId
@@ -258,12 +262,12 @@ export class AppService {
 
     async getDailyWinnerToKenId(): Promise<string | null> {
         const dateStart = moment().subtract(1, 'days').startOf('day')
-        const dateEnd = moment().subtract(1, 'day').endOf('day')
+        const dateEnd = moment().subtract(0, 'day').endOf('day')
 
         const tokensMap = new Map<string, bigint>()
         const tokens = await this.getTokens({ offset: 0, limit: 1000 })
         for(const token of tokens) {
-            const tokenSwaps = await this.dataSource.manager.find(Swap, {
+            const tokenSwaps = await this.dataSource.manager.find(Trade, {
                 where: {
                     token: {
                         id: token.id
@@ -271,13 +275,14 @@ export class AppService {
                     createdAt: Between(dateStart.toDate(), dateEnd.toDate())
                 }
             })
-            const totalAmount = tokenSwaps.reduce((acc, item) => acc += BigInt(item.volume), 0n)
+            const totalAmount = tokenSwaps.reduce((acc, item) => acc += BigInt(item.amountOut), 0n)
             tokensMap.set(token.id, totalAmount)
         }
         const sortedMapArray = ([...tokensMap.entries()]
           .sort(([aKey, aValue], [bKey, bValue]) => {
             return aValue - bValue > 0 ? -1 : 1
         }));
+        console.log(sortedMapArray)
         if(sortedMapArray.length > 0) {
             const [winnerTokenId] = sortedMapArray[0]
             return winnerTokenId
