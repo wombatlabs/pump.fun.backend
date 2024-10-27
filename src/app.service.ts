@@ -69,7 +69,7 @@ export class AppService {
                     fee,
                     timestamp
                 });
-                this.logger.log(`Swap: token=${tokenAddress}, amountIn=${amountIn}`)
+                this.logger.log(`Trade [${tradeType}]: token=${tokenAddress}, amountIn=${amountIn}, amountOut=${amountOut}, fee=${fee}`)
             } catch (e) {
                 this.logger.error(`Failed to process swap token=${tokenAddress} txnHash=${txnHash}`, e)
                 throw new Error(e);
@@ -157,13 +157,13 @@ export class AppService {
                         blockNumber: String(tokenCreated.blockNumber),
                         timestamp
                     });
-                    this.logger.log(`Added new token: address=${tokenAddress}, txnHash=${txnHash}, timestamp=${timestamp}`)
+                    this.logger.log(`New token: address=${tokenAddress}, txnHash=${txnHash}, timestamp=${timestamp}`)
                 }
 
                 await this.processTradeEvents(buyEvents, TradeType.buy)
                 await this.processTradeEvents(sellEvents, TradeType.sell)
 
-                this.logger.log(`[${fromBlock} - ${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens=${tokenCreatedEvents.length}, trade=${[...buyEvents, ...sellEvents].length} (buy=${buyEvents.length}, sell=${sellEvents.length})`)
+                this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens=${tokenCreatedEvents.length}, trade=${[...buyEvents, ...sellEvents].length} (buy=${buyEvents.length}, sell=${sellEvents.length})`)
                 toBlock += 1
             } else {
                 // Wait for blockchain
@@ -282,7 +282,6 @@ export class AppService {
           .sort(([aKey, aValue], [bKey, bValue]) => {
             return aValue - bValue > 0 ? -1 : 1
         }));
-        console.log(sortedMapArray)
         if(sortedMapArray.length > 0) {
             const [winnerTokenId] = sortedMapArray[0]
             return winnerTokenId
