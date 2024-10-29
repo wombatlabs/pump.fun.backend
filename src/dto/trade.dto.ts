@@ -2,7 +2,7 @@ import {ApiProperty} from "@nestjs/swagger";
 import {Transform, Type} from "class-transformer";
 import {IsString} from "class-validator";
 
-export class GetSwapsDto {
+export class GetTradesDto {
   @ApiProperty({ type: String, required: true })
   @Transform((address) => address.value.trim().toLowerCase())
   @Type(() => String)

@@ -1,7 +1,7 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {ConfigService} from "@nestjs/config";
 import {Contract, ContractAbi, EventLog, Web3} from "web3";
-import * as TokenFactoryABI from '../abi/TokenFactory.json'
+import * as TokenFactoryABI from './abi/TokenFactory.json'
 import {Between, DataSource} from "typeorm";
 import {Token} from "./entities";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
@@ -9,9 +9,9 @@ import {Comment} from "./entities/comment.entity";
 import {GetTokensDto} from "./dto/token.dto";
 import * as process from "node:process";
 import {Trade, TradeType} from "./entities/trade.entity";
-import {GetSwapsDto} from "./dto/swap.dto";
 import {Cron, CronExpression} from "@nestjs/schedule";
 import * as moment from "moment";
+import {GetTradesDto} from "./dto/trade.dto";
 
 @Injectable()
 export class AppService {
@@ -26,6 +26,16 @@ export class AppService {
         const rpcUrl = configService.get('RPC_URL')
         const contractAddress = configService.get('PUMP_FUN_CONTRACT_ADDRESS')
         const initialBlockNumber = configService.get('PUMP_FUN_INITIAL_BLOCK_NUMBER')
+
+        if(!contractAddress) {
+            this.logger.error(`[PUMP_FUN_CONTRACT_ADDRESS] is missing but required, exit`)
+            process.exit(1)
+        }
+
+        if(!initialBlockNumber) {
+            this.logger.error(`[PUMP_FUN_INITIAL_BLOCK_NUMBER] is missing but required, exit`)
+            process.exit(1)
+        }
 
         this.logger.log(`Starting app service, RPC_URL=${
             rpcUrl
@@ -204,7 +214,7 @@ export class AppService {
         })
     }
 
-    async getTrades(dto: GetSwapsDto){
+    async getTrades(dto: GetTradesDto){
         return await this.dataSource.manager.find(Trade, {
             where: {
                 token: {
@@ -246,7 +256,7 @@ export class AppService {
     }
 
     // '0 0 * * * *'
-    @Cron(CronExpression.EVERY_5_SECONDS)
+    @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
     async handleCron() {
         const totalAttempts = 3
         for(let i = 0; i < totalAttempts; i++) {
@@ -262,7 +272,7 @@ export class AppService {
 
     async getDailyWinnerToKenId(): Promise<string | null> {
         const dateStart = moment().subtract(1, 'days').startOf('day')
-        const dateEnd = moment().subtract(0, 'day').endOf('day')
+        const dateEnd = moment().subtract(1, 'day').endOf('day')
 
         const tokensMap = new Map<string, bigint>()
         const tokens = await this.getTokens({ offset: 0, limit: 1000 })

@@ -52,6 +52,7 @@
     "web3": "^4.13.0"
   },
   "devDependencies": {
+    "@flydotio/dockerfile": "^0.5.9",
     "@nestjs/cli": "^9.5.0",
     "@nestjs/schematics": "^9.2.0",
     "@nestjs/testing": "^10.3.10",

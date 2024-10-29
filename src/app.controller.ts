@@ -5,7 +5,7 @@ import {SkipThrottle} from "@nestjs/throttler";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {AppService} from "./app.service";
 import {GetTokensDto} from "./dto/token.dto";
-import {GetSwapsDto} from "./dto/swap.dto";
+import {GetTradesDto} from "./dto/trade.dto";
 
 @SkipThrottle()
 @ApiTags('app')
@@ -44,8 +44,8 @@ export class AppController {
     return await this.appService.addComment(dto)
   }
 
-  @Get('/swaps')
-  getSwaps(@Query() dto: GetSwapsDto) {
+  @Get('/trades')
+  getTrades(@Query() dto: GetTradesDto) {
     return this.appService.getTrades(dto)
   }
 }
