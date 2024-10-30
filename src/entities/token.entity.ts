@@ -6,10 +6,11 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
   ManyToMany,
-  JoinTable
+  JoinTable, AfterLoad, AfterInsert, AfterUpdate, OneToOne, ManyToOne
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import {Comment} from "./comment.entity";
+import {UserAccount} from "./user-account.entity";
 
 @Entity({ name: 'tokens' })
 export class Token {
@@ -38,10 +39,18 @@ export class Token {
   symbol: string;
 
   @ApiProperty()
-  @Column({ type: 'bigint' })
+  @Column({ type: 'integer' })
   timestamp: number;
 
-  @OneToMany(() => Comment, (comment) => comment.token, { eager: true })
+  @ManyToOne(() => UserAccount, (user) => user.tokens, {
+    eager: true
+  })
+  @JoinTable()
+  user: UserAccount
+
+  @OneToMany(() => Comment, (comment) => comment.token, {
+    eager: true
+  })
   @JoinTable()
   comments: Comment[]
 
@@ -52,11 +61,4 @@ export class Token {
   @ApiProperty()
   @UpdateDateColumn({ name: 'updatedAt' })
   updatedAt: Date;
-
-  // getBlockchainAccounts(): IBlockchainAccount[] {
-  //   return this.blockchainAccounts.map(item => ({
-  //     id: item.id,
-  //     address: item.address,
-  //   }))
-  // }
 }

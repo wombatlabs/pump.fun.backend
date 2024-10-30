@@ -4,7 +4,7 @@ import {Contract, ContractAbi, EventLog, Web3} from "web3";
 import * as TokenFactoryABI from './abi/TokenFactory.json'
 import * as TokenABI from './abi/Token.json'
 import {Between, DataSource} from "typeorm";
-import {IndexerState, Token} from "./entities";
+import {IndexerState, Token, UserAccount} from "./entities";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {Comment} from "./entities";
 import {GetTokensDto} from "./dto/token.dto";
@@ -13,6 +13,7 @@ import {Trade, TradeType} from "./entities/trade.entity";
 import {Cron, CronExpression} from "@nestjs/schedule";
 import * as moment from "moment";
 import {GetTradesDto} from "./dto/trade.dto";
+import {UserService} from "./user/user.service";
 
 @Injectable()
 export class AppService {
@@ -22,6 +23,7 @@ export class AppService {
     private readonly blocksIndexingRange = 1000
     constructor(
       private configService: ConfigService,
+      private userService: UserService,
       private dataSource: DataSource,
     ) {
         const rpcUrl = configService.get('RPC_URL')
@@ -70,6 +72,9 @@ export class AppService {
                 })
                 this.logger.log(`Set initial blockNumber=${blockNumber}`)
             }
+
+            await this.userService.addNewUser({ address: '0x98f0c3d42b8dafb1f73d8f105344c6a4434a0109' })
+            await this.userService.addNewUser({ address: '0x2AB4eF5E937CcC03a9c0eAfC7C00836774B149E0' })
         } catch (e) {
             this.logger.error(`Failed to bootstrap, exit`, e)
             process.exit(1)
@@ -175,6 +180,14 @@ export class AppService {
                     const tokenAddress = values['token'] as string
                     const timestamp = Number(values['timestamp'] as bigint)
 
+                    const tx = await this.web3.eth.getTransaction(txnHash)
+                    const userAddress = tx.from
+                    const user = await this.dataSource.manager.findOne(UserAccount, {
+                        where: {
+                            address: userAddress.toLowerCase()
+                        }
+                    })
+
                     const tokenContract = new this.web3.eth.Contract(TokenABI, tokenAddress);
                     const name = await tokenContract.methods.name().call() as string
                     const symbol = await tokenContract.methods.symbol().call() as string
@@ -186,8 +199,9 @@ export class AppService {
                         name,
                         symbol,
                         timestamp,
+                        user
                     });
-                    this.logger.log(`New token: address=${tokenAddress}, name=${name}, symbol=${symbol}, txnHash=${txnHash}`);
+                    this.logger.log(`New token: address=${tokenAddress}, name=${name}, symbol=${symbol}, user=${userAddress}, txnHash=${txnHash}`);
                 }
 
                 await this.processTradeEvents(buyEvents, TradeType.buy)
