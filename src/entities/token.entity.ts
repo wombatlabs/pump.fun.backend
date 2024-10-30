@@ -22,12 +22,20 @@ export class Token {
   txnHash: string;
 
   @ApiProperty()
-  @Column({ type: 'bigint' })
-  blockNumber: string;
+  @Column({ type: 'integer' })
+  blockNumber: number;
 
   @ApiProperty()
   @Column({ unique: true })
   address: string;
+
+  @ApiProperty()
+  @Column()
+  name: string;
+
+  @ApiProperty()
+  @Column()
+  symbol: string;
 
   @ApiProperty()
   @Column({ type: 'bigint' })

@@ -24,8 +24,8 @@ export class Trade {
   txnHash: string;
 
   @ApiProperty()
-  @Column({ type: 'bigint' })
-  blockNumber: string;
+  @Column({ type: 'integer' })
+  blockNumber: number;
 
   @ApiProperty()
   @Column({ type: 'enum', enum: TradeType })

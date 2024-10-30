@@ -3,6 +3,11 @@ import {IsString} from 'class-validator';
 import {Transform, Type} from "class-transformer";
 
 export class GetTokensDto {
+  @ApiProperty({ type: String, required: false, default: '' })
+  // @Type(() => String)
+  // @IsString()
+  search?: string;
+
   @ApiProperty({ type: Number, required: false, default: '100' })
   // @Transform((limit) => limit.value.toNumber())
   @Type(() => String)

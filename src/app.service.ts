@@ -2,10 +2,11 @@ import {Injectable, Logger} from '@nestjs/common';
 import {ConfigService} from "@nestjs/config";
 import {Contract, ContractAbi, EventLog, Web3} from "web3";
 import * as TokenFactoryABI from './abi/TokenFactory.json'
+import * as TokenABI from './abi/Token.json'
 import {Between, DataSource} from "typeorm";
-import {Token} from "./entities";
+import {IndexerState, Token} from "./entities";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
-import {Comment} from "./entities/comment.entity";
+import {Comment} from "./entities";
 import {GetTokensDto} from "./dto/token.dto";
 import * as process from "node:process";
 import {Trade, TradeType} from "./entities/trade.entity";
@@ -47,14 +48,38 @@ export class AppService {
 
         this.web3 = new Web3(rpcUrl);
         this.tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, contractAddress);
-        this.eventsTrackingLoop()
+        this.bootstrap().then(
+          () => this.eventsTrackingLoop()
+        )
         this.logger.log(`App service started`)
+    }
+
+    private async bootstrap() {
+        try {
+            const indexerState = await this.dataSource.manager.findOne(IndexerState, {
+                where: {}
+            })
+            if(!indexerState) {
+                const blockNumber = +this.configService.get<number>('PUMP_FUN_INITIAL_BLOCK_NUMBER')
+                if(!blockNumber) {
+                    this.logger.error('[PUMP_FUN_INITIAL_BLOCK_NUMBER] is empty but required, exit')
+                    process.exit(1)
+                }
+                await this.dataSource.manager.insert(IndexerState, {
+                    blockNumber
+                })
+                this.logger.log(`Set initial blockNumber=${blockNumber}`)
+            }
+        } catch (e) {
+            this.logger.error(`Failed to bootstrap, exit`, e)
+            process.exit(1)
+        }
     }
 
     private async processTradeEvents(events: EventLog[], tradeType: TradeType) {
         for(const event of events) {
             const txnHash = event.transactionHash
-            const blockNumber = event.blockNumber.toString()
+            const blockNumber = Number(event.blockNumber)
             const values = event.returnValues
             const tokenAddress = values['token'] as string
             const amountIn = String(values['amount0In'] as bigint)
@@ -88,38 +113,27 @@ export class AppService {
     }
 
     private async getLatestIndexedBlockNumber() {
-        const lastToken = await this.dataSource.manager.findOne(Token, {
+        const indexerState = await this.dataSource.manager.findOne(IndexerState, {
             where: {},
-            order: {
-                createdAt: 'desc'
-            }
         })
-        const lastTrade = await this.dataSource.manager.findOne(Trade, {
-            where: {},
-            order: {
-                createdAt: 'desc'
-            }
-        })
-        if(lastToken || lastTrade) {
-           return Math.max(+lastToken?.blockNumber || 0, +lastTrade?.blockNumber || 0)
+        if(indexerState) {
+            return indexerState.blockNumber
         }
         return 0
     }
 
-    async eventsTrackingLoop(
-      fromBlockParam?: number
-    ) {
-        if(!fromBlockParam) {
-            const lastIndexedBlockNumber = await this.getLatestIndexedBlockNumber()
-            if(lastIndexedBlockNumber) {
-                fromBlockParam = lastIndexedBlockNumber + 1
-                this.logger.log(`Starting from the last block from DB: ${fromBlockParam}`)
-            } else {
-                fromBlockParam = +this.configService.get<number>('PUMP_FUN_INITIAL_BLOCK_NUMBER')
-                this.logger.log(`Starting from the last block from config: ${fromBlockParam}`)
-            }
+    private async updateLastIndexerBlockNumber(blockNumber: number) {
+        const stateRepository = this.dataSource.manager.getRepository(IndexerState)
+        const indexerState = await stateRepository.findOne({
+            where: {}
+        })
+        indexerState.blockNumber = blockNumber
+        await stateRepository.save(indexerState)
+    }
 
-        }
+    async eventsTrackingLoop() {
+        const lastIndexedBlockNumber = await this.getLatestIndexedBlockNumber()
+        const fromBlockParam = lastIndexedBlockNumber + 1
 
         let fromBlock = fromBlockParam
         let toBlock = fromBlock
@@ -161,13 +175,19 @@ export class AppService {
                     const tokenAddress = values['token'] as string
                     const timestamp = Number(values['timestamp'] as bigint)
 
+                    const tokenContract = new this.web3.eth.Contract(TokenABI, tokenAddress);
+                    const name = await tokenContract.methods.name().call() as string
+                    const symbol = await tokenContract.methods.symbol().call() as string
+
                     await this.dataSource.manager.insert(Token, {
                         txnHash,
                         address: tokenAddress,
-                        blockNumber: String(tokenCreated.blockNumber),
-                        timestamp
+                        blockNumber: Number(tokenCreated.blockNumber),
+                        name,
+                        symbol,
+                        timestamp,
                     });
-                    this.logger.log(`New token: address=${tokenAddress}, txnHash=${txnHash}, timestamp=${timestamp}`)
+                    this.logger.log(`New token: address=${tokenAddress}, name=${name}, symbol=${symbol}, txnHash=${txnHash}`);
                 }
 
                 await this.processTradeEvents(buyEvents, TradeType.buy)
@@ -185,7 +205,15 @@ export class AppService {
             this.logger.error(`[${fromBlock} - ${toBlock}] Failed to index blocks range:`, e)
             await new Promise(resolve => setTimeout(resolve, 5 * 60 * 1000));
         }
-        this.eventsTrackingLoop(toBlock)
+
+        try {
+            await this.updateLastIndexerBlockNumber(toBlock)
+        } catch (e) {
+            this.logger.error(`Failed to update last blockNumber=${toBlock}, exit`, e)
+            process.exit(1)
+        }
+
+        this.eventsTrackingLoop()
     }
 
     async getComments(dto: GetCommentsDto){
@@ -261,7 +289,7 @@ export class AppService {
         const totalAttempts = 3
         for(let i = 0; i < totalAttempts; i++) {
             try {
-                const winnerTokenId = await this.getDailyWinnerToKenId()
+                const winnerTokenId = await this.getDailyWinnerTokenId()
                 this.logger.log(`Daily winner tokenId: ${winnerTokenId}`)
                 break;
             } catch (e) {
@@ -270,7 +298,7 @@ export class AppService {
         }
     }
 
-    async getDailyWinnerToKenId(): Promise<string | null> {
+    async getDailyWinnerTokenId(): Promise<string | null> {
         const dateStart = moment().subtract(1, 'days').startOf('day')
         const dateEnd = moment().subtract(1, 'day').endOf('day')
 
