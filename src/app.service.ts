@@ -73,8 +73,15 @@ export class AppService {
                 this.logger.log(`Set initial blockNumber=${blockNumber}`)
             }
 
-            await this.userService.addNewUser({ address: '0x98f0c3d42b8dafb1f73d8f105344c6a4434a0109' })
-            await this.userService.addNewUser({ address: '0x2AB4eF5E937CcC03a9c0eAfC7C00836774B149E0' })
+            const bootstrapUsers = [
+              '0x98f0c3d42b8dafb1f73d8f105344c6a4434a0109',
+              '0x2AB4eF5E937CcC03a9c0eAfC7C00836774B149E0'
+            ]
+            for(const userAddress of bootstrapUsers) {
+                if(!(await this.userService.getUserByAddress(userAddress))) {
+                    await this.userService.addNewUser({ address: userAddress })
+                }
+            }
         } catch (e) {
             this.logger.error(`Failed to bootstrap, exit`, e)
             process.exit(1)
@@ -246,14 +253,25 @@ export class AppService {
     }
 
     async getTokens(dto: GetTokensDto){
-        return await this.dataSource.manager.find(Token, {
-            where: {},
-            take: dto.limit,
-            skip: dto.offset,
-            order: {
-                createdAt: 'desc'
-            }
-        })
+        const { search, offset, limit } = dto
+        const query = this.dataSource.getRepository(Token)
+          .createQueryBuilder('token')
+          .leftJoinAndSelect('token.user', 'user')
+          .offset(offset)
+          .limit(limit)
+          .orderBy({
+              timestamp: 'DESC'
+          })
+
+        if(search) {
+            query.where('token.name = :name', { name: search })
+              .orWhere('token.address = :address', { address: search })
+              .orWhere('token.symbol = :symbol', { symbol: search })
+              .orWhere('token.id = :id', { id: search })
+              .orWhere('token.txnHash = :txnHash', { txnHash: search })
+        }
+
+        return await query.getMany()
     }
 
     async getTrades(dto: GetTradesDto){
