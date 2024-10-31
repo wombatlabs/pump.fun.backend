@@ -7,7 +7,7 @@ export class AddCommentDto {
   @Transform((address) => address.value.trim().toLowerCase())
   @Type(() => String)
   @IsString()
-  tokenId: string;
+  tokenAddress: string;
 
   @ApiProperty({ type: String, required: true })
   @Transform((address) => address.value.trim().toLowerCase())
@@ -27,7 +27,7 @@ export class GetCommentsDto {
   @Transform((address) => address.value.trim().toLowerCase())
   @Type(() => String)
   @IsString()
-  tokenId: string;
+  tokenAddress: string;
 
   @ApiProperty({ type: Number, required: false, default: '100' })
   // @Transform((limit) => limit.value.toNumber())

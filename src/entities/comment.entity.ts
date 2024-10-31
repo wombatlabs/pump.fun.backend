@@ -7,22 +7,26 @@ import {
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import {Token} from "./token.entity";
+import {UserAccount} from "./user-account.entity";
 
 @Entity({ name: 'comments' })
 export class Comment {
   @ApiProperty()
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
-  @ApiProperty()
-  @Column()
-  userAddress: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
   @ApiProperty()
   @Column()
   text: string;
 
-  @ManyToOne(() => Token, (token) => token.comments)
+  @ManyToOne(() => UserAccount, (userAccount) => userAccount.comments, {
+    eager: true
+  })
+  user: UserAccount
+
+  @ManyToOne(() => Token, (token) => token.comments, {
+    eager: true
+  })
   token: Token
 
   @ApiProperty()

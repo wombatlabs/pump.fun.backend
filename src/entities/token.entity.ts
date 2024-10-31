@@ -48,9 +48,7 @@ export class Token {
   @JoinTable()
   user: UserAccount
 
-  @OneToMany(() => Comment, (comment) => comment.token, {
-    eager: true
-  })
+  @OneToMany(() => Comment, (comment) => comment.token)
   @JoinTable()
   comments: Comment[]
 

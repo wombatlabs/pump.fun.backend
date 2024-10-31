@@ -51,9 +51,13 @@ export class AppController {
 
   @Post('/comment')
   async addComment(@Body() dto: AddCommentDto) {
-    const token = await this.appService.getTokenById(dto.tokenId)
+    const token = await this.appService.getTokenByAddress(dto.tokenAddress)
     if(!token) {
       throw new NotFoundException('Token not found')
+    }
+    const user = await this.userService.getUserByAddress(dto.userAddress)
+    if(!user) {
+      throw new NotFoundException('User not found')
     }
     return await this.appService.addComment(dto)
   }

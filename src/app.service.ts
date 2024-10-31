@@ -241,13 +241,13 @@ export class AppService {
         return await this.dataSource.manager.find(Comment, {
             where: {
                 token: {
-                    id: dto.tokenId
+                    address: dto.tokenAddress
                 }
             },
             take: +dto.limit,
             skip: +dto.offset,
             order: {
-                createdAt: 'desc'
+                createdAt: 'asc'
             }
         })
     }
@@ -257,6 +257,7 @@ export class AppService {
         const query = this.dataSource.getRepository(Token)
           .createQueryBuilder('token')
           .leftJoinAndSelect('token.user', 'user')
+          // .leftJoinAndSelect('token.comments', 'comments')
           .offset(offset)
           .limit(limit)
           .orderBy({
@@ -267,7 +268,6 @@ export class AppService {
             query.where('token.name = :name', { name: search })
               .orWhere('token.address = :address', { address: search })
               .orWhere('token.symbol = :symbol', { symbol: search })
-              .orWhere('token.id = :id', { id: search })
               .orWhere('token.txnHash = :txnHash', { txnHash: search })
         }
 
@@ -306,10 +306,12 @@ export class AppService {
     }
 
     async addComment(dto: AddCommentDto): Promise<string> {
-        const token = await this.getTokenById(dto.tokenId)
+        const token = await this.getTokenByAddress(dto.tokenAddress)
+        const user = await this.userService.getUserByAddress(dto.userAddress)
         const comment = this.dataSource.manager.create(Comment, {
             ...dto,
-            token
+            token,
+            user
         })
         const { identifiers } = await this.dataSource.manager.insert(Comment, comment)
         return identifiers[0].id

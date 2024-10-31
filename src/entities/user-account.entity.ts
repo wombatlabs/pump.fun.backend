@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import {Token} from "./token.entity";
+import {Comment} from "./comment.entity";
 
 @Entity({ name: 'users' })
 export class UserAccount {
@@ -27,6 +28,9 @@ export class UserAccount {
 
   @OneToMany(() => Token, (token) => token.user)
   tokens: Token[]
+
+  @OneToMany(() => Comment, (comment) => comment.user)
+  comments: Comment[]
 
   @ApiProperty()
   @CreateDateColumn({ name: 'createdAt' })
