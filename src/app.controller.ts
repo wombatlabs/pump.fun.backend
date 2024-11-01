@@ -20,10 +20,11 @@ import {GetTradesDto} from "./dto/trade.dto";
 import {AddUserDto, GetUsersDto} from "./dto/user.dto";
 import {UserService} from "./user/user.service";
 import {FileInterceptor} from "@nestjs/platform-express";
-import { Storage } from '@google-cloud/storage'
 import * as path from "node:path";
 import {GcloudService} from "./gcloud/gcloud.service";
 const serviceKey = path.join(__dirname, './keys.json')
+import { v4 as uuidv4 } from 'uuid';
+import {AddTokenMetadataDto} from "./dto/metadata.dto";
 
 @SkipThrottle()
 @ApiTags('app')
@@ -97,10 +98,35 @@ export class AppController {
 
   @Post('/uploadImage')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadFile(@UploadedFile() uploadedFile: Express.Multer.File, @Headers() headers) {
+  async uploadImage(@UploadedFile() uploadedFile: Express.Multer.File, @Headers() headers) {
     const userAddress = headers['meta_user_address']
-    const publicImageUrl = await this.gCloudService.uploadImage(userAddress, uploadedFile)
-    this.logger.log(`Image uploaded, publicUrl=${publicImageUrl}, userAddress=${userAddress}`)
-    return publicImageUrl
+    const uuid = uuidv4()
+    const imageUrl = await this.gCloudService.uploadImage(uploadedFile, uuid)
+    this.logger.log(`Image uploaded, imageUrl=${imageUrl}, userAddress=${userAddress}`)
+    return imageUrl
+  }
+
+  @Post('/metadata')
+  async addMetadata(@Body() dto: AddTokenMetadataDto) {
+    let uuid = ''
+
+    if(!dto.image) {
+      throw new BadRequestException('Image property is missing')
+    }
+
+    const imageItems = dto.image.split('/')
+    if(imageItems.length > 0) {
+      uuid = imageItems[imageItems.length - 1].split('.')[0]
+    } else {
+      throw new BadRequestException('Invalid image url')
+    }
+
+    if(!uuid) {
+      throw new BadRequestException('Failed to get uuid')
+    }
+
+    const metadataUrl = await this.gCloudService.uploadMetadata(dto, uuid)
+    this.logger.log(`Metadata uploaded, url=${metadataUrl}, content: ${JSON.stringify(dto)}`)
+    return metadataUrl
   }
 }
