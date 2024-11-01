@@ -51,7 +51,9 @@ export class AppService {
         this.web3 = new Web3(rpcUrl);
         this.tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, contractAddress);
         this.bootstrap().then(
-          () => this.eventsTrackingLoop()
+          () => {
+              // this.eventsTrackingLoop()
+          }
         )
         this.logger.log(`App service started`)
     }

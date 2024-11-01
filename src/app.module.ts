@@ -10,6 +10,7 @@ import {ThrottlerGuard, ThrottlerModule} from "@nestjs/throttler";
 import {APP_GUARD} from "@nestjs/core";
 import {ScheduleModule} from "@nestjs/schedule";
 import { UserService } from './user/user.service';
+import { GcloudService } from './gcloud/gcloud.service';
 
 @Module({
   imports: [
@@ -37,7 +38,8 @@ import { UserService } from './user/user.service';
       provide: APP_GUARD,
       useClass: ThrottlerGuard
     },
-    UserService
+    UserService,
+    GcloudService
   ],
 })
 export class AppModule {}

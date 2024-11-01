@@ -7,7 +7,8 @@ import {
   NotFoundException,
   Param,
   Post,
-  Query
+  Query, UploadedFile, UseInterceptors,
+  Headers
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
@@ -18,6 +19,11 @@ import {GetTokensDto} from "./dto/token.dto";
 import {GetTradesDto} from "./dto/trade.dto";
 import {AddUserDto, GetUsersDto} from "./dto/user.dto";
 import {UserService} from "./user/user.service";
+import {FileInterceptor} from "@nestjs/platform-express";
+import { Storage } from '@google-cloud/storage'
+import * as path from "node:path";
+import {GcloudService} from "./gcloud/gcloud.service";
+const serviceKey = path.join(__dirname, './keys.json')
 
 @SkipThrottle()
 @ApiTags('app')
@@ -27,7 +33,8 @@ export class AppController {
   constructor(
     private readonly configService: ConfigService,
     private readonly appService: AppService,
-    private readonly userService: UserService
+    private readonly userService: UserService,
+    private readonly gCloudService: GcloudService
   ) {}
   @Get('/version')
   getVersion() {
@@ -86,5 +93,14 @@ export class AppController {
       throw new NotFoundException('User not found')
     }
     return user
+  }
+
+  @Post('/uploadImage')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadFile(@UploadedFile() uploadedFile: Express.Multer.File, @Headers() headers) {
+    const userAddress = headers['meta_user_address']
+    const publicImageUrl = await this.gCloudService.uploadImage(userAddress, uploadedFile)
+    this.logger.log(`Image uploaded, publicUrl=${publicImageUrl}, userAddress=${userAddress}`)
+    return publicImageUrl
   }
 }
