@@ -215,16 +215,15 @@ export class AppService {
                 await this.processTradeEvents(sellEvents, TradeType.sell)
 
                 this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens=${tokenCreatedEvents.length}, trade=${[...buyEvents, ...sellEvents].length} (buy=${buyEvents.length}, sell=${sellEvents.length})`)
-                toBlock += 1
             } else {
                 // Wait for blockchain
-                toBlock = fromBlockParam
-                await new Promise(resolve => setTimeout(resolve, 5 * 60 * 1000));
+                toBlock = fromBlockParam - 1
+                await new Promise(resolve => setTimeout(resolve, 5 * 1000));
             }
         } catch (e) {
-            toBlock = fromBlockParam
+            toBlock = fromBlockParam - 1
             this.logger.error(`[${fromBlock} - ${toBlock}] Failed to index blocks range:`, e)
-            await new Promise(resolve => setTimeout(resolve, 5 * 60 * 1000));
+            await new Promise(resolve => setTimeout(resolve, 30 * 1000));
         }
 
         try {
