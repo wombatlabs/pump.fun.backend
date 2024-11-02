@@ -2,18 +2,18 @@ import {Injectable, Logger} from '@nestjs/common';
 import {ConfigService} from "@nestjs/config";
 import {Contract, ContractAbi, EventLog, Web3} from "web3";
 import * as TokenFactoryABI from './abi/TokenFactory.json'
-import * as TokenABI from './abi/Token.json'
 import {Between, DataSource} from "typeorm";
-import {IndexerState, Token, UserAccount} from "./entities";
+import {Comment, IndexerState, Token, UserAccount} from "./entities";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
-import {Comment} from "./entities";
 import {GetTokensDto} from "./dto/token.dto";
 import * as process from "node:process";
-import {Trade, TradeType} from "./entities/trade.entity";
+import {Trade} from "./entities";
 import {Cron, CronExpression} from "@nestjs/schedule";
 import * as moment from "moment";
 import {GetTradesDto} from "./dto/trade.dto";
 import {UserService} from "./user/user.service";
+import axios from "axios";
+import {TokenMetadata, TradeEventLog, TradeType} from "./types";
 
 @Injectable()
 export class AppService {
@@ -90,12 +90,13 @@ export class AppService {
         }
     }
 
-    private async processTradeEvents(events: EventLog[], tradeType: TradeType) {
+    private async processTradeEvents(events: TradeEventLog[]) {
         for(const event of events) {
-            const txnHash = event.transactionHash
-            const blockNumber = Number(event.blockNumber)
-            const values = event.returnValues
-            const tokenAddress = values['token'] as string
+            const { data, type } = event
+            const txnHash = data.transactionHash.toLowerCase()
+            const blockNumber = Number(data.blockNumber)
+            const values = data.returnValues
+            const tokenAddress = (values['token'] as string).toLowerCase()
             const amountIn = String(values['amount0In'] as bigint)
             const amountOut = String(values['amount0Out'] as bigint)
             const fee = String(values['fee'] as bigint)
@@ -103,13 +104,13 @@ export class AppService {
 
             const token = await this.getTokenByAddress(tokenAddress)
             if(!token) {
-                this.logger.error(`swap event: failed to get token by address="${tokenAddress}", event tx hash="${event.transactionHash}", exit`)
+                this.logger.error(`Trade event: failed to get token by address="${tokenAddress}", event tx hash="${data.transactionHash}", exit`)
                 process.exit(1)
             }
 
             try {
                 await this.dataSource.manager.insert(Trade, {
-                    type: tradeType,
+                    type,
                     txnHash,
                     blockNumber,
                     token,
@@ -118,9 +119,9 @@ export class AppService {
                     fee,
                     timestamp
                 });
-                this.logger.log(`Trade [${tradeType}]: token=${tokenAddress}, amountIn=${amountIn}, amountOut=${amountOut}, fee=${fee}`)
+                this.logger.log(`Trade [${type}]: token=${tokenAddress}, amountIn=${amountIn}, amountOut=${amountOut}, fee=${fee}, timestamp=${timestamp}, txnHash=${txnHash}`)
             } catch (e) {
-                this.logger.error(`Failed to process swap token=${tokenAddress} txnHash=${txnHash}`, e)
+                this.logger.error(`Failed to process trade [${type}]: token=${tokenAddress} txnHash=${txnHash}`, e)
                 throw new Error(e);
             }
         }
@@ -163,7 +164,7 @@ export class AppService {
                     fromBlock,
                     toBlock,
                     topics: [
-                      this.web3.utils.sha3('TokenCreated(address,uint256)'),
+                      this.web3.utils.sha3('TokenCreated(address,string,string,string,address,uint256)'),
                     ],
                 }) as EventLog[];
 
@@ -183,23 +184,44 @@ export class AppService {
                     ],
                 }) as EventLog[];
 
+                const tradeEvents: TradeEventLog[] = [...buyEvents].map(data => {
+                    return {
+                        type: TradeType.buy,
+                        data
+                    }
+                }).concat([...sellEvents].map(data => {
+                    return {
+                        type: TradeType.sell,
+                        data
+                    }
+                })).sort((a, b) => {
+                    return +(a.data.returnValues.timestamp.toString()) - +(b.data.returnValues.timestamp.toString())
+                })
+
                 for(const tokenCreated of tokenCreatedEvents) {
-                    const txnHash = tokenCreated.transactionHash
+                    const txnHash = tokenCreated.transactionHash.toLowerCase()
                     const values = tokenCreated.returnValues
-                    const tokenAddress = values['token'] as string
+                    const tokenAddress = (values['token'] as string).toLowerCase()
+                    const name = values['name'] as string
+                    const symbol = values['symbol'] as string
+                    const uri = values['uri'] as string
+                    const creatorAddress = (values['creator'] as string).toLowerCase()
                     const timestamp = Number(values['timestamp'] as bigint)
 
-                    const tx = await this.web3.eth.getTransaction(txnHash)
-                    const userAddress = tx.from
+                    let image = null
+                    let uriData = null
+                    try {
+                        const { data } = await axios.get<TokenMetadata>(uri)
+                        uriData = data
+                    } catch (e) {
+                        this.logger.error(`Failed to get token uri data, uri=${uri}, tokenAddress=${tokenAddress}`, e)
+                    }
+
                     const user = await this.dataSource.manager.findOne(UserAccount, {
                         where: {
-                            address: userAddress.toLowerCase()
+                            address: creatorAddress
                         }
                     })
-
-                    const tokenContract = new this.web3.eth.Contract(TokenABI, tokenAddress);
-                    const name = await tokenContract.methods.name().call() as string
-                    const symbol = await tokenContract.methods.symbol().call() as string
 
                     await this.dataSource.manager.insert(Token, {
                         txnHash,
@@ -208,13 +230,14 @@ export class AppService {
                         name,
                         symbol,
                         timestamp,
-                        user
+                        user,
+                        uri,
+                        uriData,
                     });
-                    this.logger.log(`New token: address=${tokenAddress}, name=${name}, symbol=${symbol}, user=${userAddress}, txnHash=${txnHash}`);
+                    this.logger.log(`Create token: address=${tokenAddress}, name=${name}, symbol=${symbol}, uri=${uri}, creator=${creatorAddress}, txnHash=${txnHash}`);
                 }
 
-                await this.processTradeEvents(buyEvents, TradeType.buy)
-                await this.processTradeEvents(sellEvents, TradeType.sell)
+                await this.processTradeEvents(tradeEvents)
 
                 this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens=${tokenCreatedEvents.length}, trade=${[...buyEvents, ...sellEvents].length} (buy=${buyEvents.length}, sell=${sellEvents.length})`)
             } else {

@@ -7,11 +7,7 @@ import {
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import {Token} from "./token.entity";
-
-export enum TradeType {
-  buy = 'buy',
-  sell = 'sell'
-}
+import {TradeType} from "../types";
 
 @Entity({ name: 'trades' })
 export class Trade {
@@ -20,7 +16,7 @@ export class Trade {
   id: string;
 
   @ApiProperty()
-  @Column({ unique: true })
+  @Column()
   txnHash: string;
 
   @ApiProperty()

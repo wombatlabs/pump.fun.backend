@@ -16,7 +16,7 @@ export class AddTokenMetadataDto {
   @ApiProperty({ type: String, required: true })
   @Type(() => String)
   @IsString()
-  ticker: string;
+  symbol: string;
 
   @ApiProperty({ type: String, required: true })
   @Type(() => String)

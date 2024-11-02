@@ -11,6 +11,7 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 import {Comment} from "./comment.entity";
 import {UserAccount} from "./user-account.entity";
+import {TokenMetadata} from "../types";
 
 @Entity({ name: 'tokens' })
 export class Token {
@@ -37,6 +38,13 @@ export class Token {
   @ApiProperty()
   @Column()
   symbol: string;
+
+  @ApiProperty()
+  @Column()
+  uri: string;
+
+  @Column({ type: 'json', nullable: true })
+  uriData: TokenMetadata | null;
 
   @ApiProperty()
   @Column({ type: 'integer' })
