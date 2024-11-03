@@ -27,6 +27,10 @@ export class Trade {
   @Column({ type: 'enum', enum: TradeType })
   type: TradeType;
 
+  @ApiProperty()
+  @Column()
+  userAddress: string;
+
   @ManyToOne(() => Token, (token) => token.comments)
   token: Token
 

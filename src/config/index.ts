@@ -8,7 +8,7 @@ const getGoogleCloudConfig = () => {
     "type": "service_account",
     "project_id": "pumpfun-440412",
     "private_key_id": "b8e5f73e8bb7f4993a6b441733ee2f487d01a60e",
-    "private_key": process.env.GOOGLE_CLOUD_PRIVATE_KEY,
+    "private_key": process.env.GOOGLE_CLOUD_PRIVATE_KEY.replace(/\\n/g, '\n'),
     "client_email": "pumpfunserviceaccount@pumpfun-440412.iam.gserviceaccount.com",
     "client_id": "112998611633035668262",
     "auth_uri": "https://accounts.google.com/o/oauth2/auth",

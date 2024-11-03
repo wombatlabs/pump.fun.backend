@@ -17,12 +17,10 @@ import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {AppService} from "./app.service";
 import {GetTokensDto} from "./dto/token.dto";
 import {GetTradesDto} from "./dto/trade.dto";
-import {AddUserDto, GetUsersDto} from "./dto/user.dto";
+import {AddUserDto} from "./dto/user.dto";
 import {UserService} from "./user/user.service";
 import {FileInterceptor} from "@nestjs/platform-express";
-import * as path from "node:path";
 import {GcloudService} from "./gcloud/gcloud.service";
-const serviceKey = path.join(__dirname, './keys.json')
 import { v4 as uuidv4 } from 'uuid';
 import {AddTokenMetadataDto} from "./dto/metadata.dto";
 

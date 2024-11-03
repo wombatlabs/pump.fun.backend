@@ -102,6 +102,9 @@ export class AppService {
             const fee = String(values['fee'] as bigint)
             const timestamp = Number(values['timestamp'] as bigint)
 
+            const txn = await this.web3.eth.getTransaction(txnHash)
+            const userAddress = txn.from.toLowerCase()
+
             const token = await this.getTokenByAddress(tokenAddress)
             if(!token) {
                 this.logger.error(`Trade event: failed to get token by address="${tokenAddress}", event tx hash="${data.transactionHash}", exit`)
@@ -113,15 +116,16 @@ export class AppService {
                     type,
                     txnHash,
                     blockNumber,
+                    userAddress,
                     token,
                     amountIn,
                     amountOut,
                     fee,
                     timestamp
                 });
-                this.logger.log(`Trade [${type}]: token=${tokenAddress}, amountIn=${amountIn}, amountOut=${amountOut}, fee=${fee}, timestamp=${timestamp}, txnHash=${txnHash}`)
+                this.logger.log(`Trade [${type}]: userAddress=${userAddress}, token=${tokenAddress}, amountIn=${amountIn}, amountOut=${amountOut}, fee=${fee}, timestamp=${timestamp}, txnHash=${txnHash}`)
             } catch (e) {
-                this.logger.error(`Failed to process trade [${type}]: token=${tokenAddress} txnHash=${txnHash}`, e)
+                this.logger.error(`Failed to process trade [${type}]: userAddress=${userAddress}, token=${tokenAddress} txnHash=${txnHash}`, e)
                 throw new Error(e);
             }
         }
@@ -208,7 +212,6 @@ export class AppService {
                     const creatorAddress = (values['creator'] as string).toLowerCase()
                     const timestamp = Number(values['timestamp'] as bigint)
 
-                    let image = null
                     let uriData = null
                     try {
                         const { data } = await axios.get<TokenMetadata>(uri)
@@ -302,13 +305,13 @@ export class AppService {
         return await this.dataSource.manager.find(Trade, {
             where: {
                 token: {
-                    id: dto.tokenId
+                    address: dto.tokenAddress
                 }
             },
             take: dto.limit,
             skip: dto.offset,
             order: {
-                createdAt: 'desc'
+                timestamp: 'desc'
             }
         })
     }
@@ -341,20 +344,19 @@ export class AppService {
         return identifiers[0].id
     }
 
-    // '0 0 * * * *'
-    @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-    async handleCron() {
-        const totalAttempts = 3
-        for(let i = 0; i < totalAttempts; i++) {
-            try {
-                const winnerTokenId = await this.getDailyWinnerTokenId()
-                this.logger.log(`Daily winner tokenId: ${winnerTokenId}`)
-                break;
-            } catch (e) {
-                this.logger.error(`Failed to get daily winner, attempt: ${i+1}/${totalAttempts}`, e)
-            }
-        }
-    }
+    // @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+    // async handleCron() {
+    //     const totalAttempts = 3
+    //     for(let i = 0; i < totalAttempts; i++) {
+    //         try {
+    //             const winnerTokenId = await this.getDailyWinnerTokenId()
+    //             this.logger.log(`Daily winner tokenId: ${winnerTokenId}`)
+    //             break;
+    //         } catch (e) {
+    //             this.logger.error(`Failed to get daily winner, attempt: ${i+1}/${totalAttempts}`, e)
+    //         }
+    //     }
+    // }
 
     async getDailyWinnerTokenId(): Promise<string | null> {
         const dateStart = moment().subtract(1, 'days').startOf('day')
