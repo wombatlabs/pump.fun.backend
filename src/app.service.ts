@@ -104,6 +104,11 @@ export class AppService {
 
             const txn = await this.web3.eth.getTransaction(txnHash)
             const userAddress = txn.from.toLowerCase()
+            const user = await this.userService.getUserByAddress(userAddress)
+            if(!user) {
+                this.logger.error(`Trade event: failed to get user by address="${userAddress}", event tx hash="${data.transactionHash}", exit`)
+                process.exit(1)
+            }
 
             const token = await this.getTokenByAddress(tokenAddress)
             if(!token) {
@@ -116,7 +121,7 @@ export class AppService {
                     type,
                     txnHash,
                     blockNumber,
-                    userAddress,
+                    user,
                     token,
                     amountIn,
                     amountOut,

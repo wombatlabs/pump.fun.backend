@@ -8,6 +8,7 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 import {Token} from "./token.entity";
 import {TradeType} from "../types";
+import {UserAccount} from "./user-account.entity";
 
 @Entity({ name: 'trades' })
 export class Trade {
@@ -27,9 +28,10 @@ export class Trade {
   @Column({ type: 'enum', enum: TradeType })
   type: TradeType;
 
-  @ApiProperty()
-  @Column()
-  userAddress: string;
+  @ManyToOne(() => UserAccount, (userAccount) => userAccount.trades, {
+    eager: true
+  })
+  user: UserAccount
 
   @ManyToOne(() => Token, (token) => token.comments)
   token: Token
