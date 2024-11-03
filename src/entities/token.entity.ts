@@ -12,6 +12,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import {Comment} from "./comment.entity";
 import {UserAccount} from "./user-account.entity";
 import {TokenMetadata} from "../types";
+import {Trade} from "./trade.entity";
 
 @Entity({ name: 'tokens' })
 export class Token {
@@ -59,6 +60,10 @@ export class Token {
   @OneToMany(() => Comment, (comment) => comment.token)
   @JoinTable()
   comments: Comment[]
+
+  @OneToMany(() => Trade, (trade) => trade.token)
+  @JoinTable()
+  trades: Trade[]
 
   @ApiProperty()
   @CreateDateColumn({ name: 'createdAt' })

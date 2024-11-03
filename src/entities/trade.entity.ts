@@ -33,7 +33,9 @@ export class Trade {
   })
   user: UserAccount
 
-  @ManyToOne(() => Token, (token) => token.comments)
+  @ManyToOne(() => Token, (token) => token.trades, {
+    eager: true
+  })
   token: Token
 
   @ApiProperty()
