@@ -25,4 +25,12 @@ export class UserService {
       },
     })
   }
+
+  async getTokensCreated(address: string) {
+    return await this.dataSource.manager.find(Token, {
+      where: {
+        address: address.toLowerCase(),
+      },
+    })
+  }
 }

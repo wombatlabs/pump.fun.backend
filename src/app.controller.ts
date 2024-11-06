@@ -94,6 +94,11 @@ export class AppController {
     return user
   }
 
+  @Get('/user/:address/tokens/created')
+  async getUserTokensCreated(@Param('address') address: string) {
+    return await this.userService.getTokensCreated(address)
+  }
+
   @Post('/uploadImage')
   @UseInterceptors(FileInterceptor('file'))
   async uploadImage(@UploadedFile() uploadedFile: Express.Multer.File, @Headers() headers) {
