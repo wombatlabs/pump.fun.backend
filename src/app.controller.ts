@@ -15,7 +15,7 @@ import { ConfigService } from '@nestjs/config';
 import {SkipThrottle} from "@nestjs/throttler";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {AppService} from "./app.service";
-import {GetTokensDto} from "./dto/token.dto";
+import {GetTokenBalancesDto, GetTokensDto} from "./dto/token.dto";
 import {GetTradesDto} from "./dto/trade.dto";
 import {AddUserDto} from "./dto/user.dto";
 import {UserService} from "./user/user.service";
@@ -48,6 +48,11 @@ export class AppController {
   @Get('/tokens')
   getTokens(@Query() dto: GetTokensDto) {
     return this.appService.getTokens(dto)
+  }
+
+  @Get('/token/balances')
+  getTokenHolders(@Query() dto: GetTokenBalancesDto) {
+    return this.appService.getTokenBalances(dto)
   }
 
   @Get('/comments')

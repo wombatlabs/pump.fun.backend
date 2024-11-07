@@ -2,7 +2,7 @@ import {Injectable, Logger} from '@nestjs/common';
 import {Between, DataSource} from "typeorm";
 import {Comment, Token, TokenBalance, UserAccount} from "./entities";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
-import {GetTokensDto} from "./dto/token.dto";
+import {GetTokenBalancesDto, GetTokensDto} from "./dto/token.dto";
 import {Trade} from "./entities";
 import {GetTradesDto} from "./dto/trade.dto";
 import {UserService} from "./user/user.service";
@@ -50,6 +50,23 @@ export class AppService {
         }
 
         return await query.getMany()
+    }
+
+    async getTokenBalances(dto: GetTokenBalancesDto){
+        const { offset = 0, limit = 100 } = dto
+
+        return this.dataSource.manager.find(TokenBalance, {
+            where: {
+                token: {
+                    address: dto.tokenAddress.toLowerCase()
+                }
+            },
+            order: {
+                balance: 'desc'
+            },
+            take: limit,
+            skip: offset
+        })
     }
 
     async getTrades(dto: GetTradesDto){
