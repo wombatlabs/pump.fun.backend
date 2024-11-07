@@ -86,8 +86,8 @@ export class AppController {
   }
 
   @Get('/user/:address')
-  async getUserByAddress(@Param('address') address: string) {
-    const user = await this.userService.getUserByAddress(address)
+  async getUserByAddress(@Param('address') userAddress: string) {
+    const user = await this.userService.getUserByAddress(userAddress)
     if(!user) {
       throw new NotFoundException('User not found')
     }
@@ -95,8 +95,8 @@ export class AppController {
   }
 
   @Get('/user/:address/tokens/created')
-  async getUserTokensCreated(@Param('address') address: string) {
-    return await this.userService.getTokensCreated(address)
+  async getUserTokensCreated(@Param('address') userAddress: string) {
+    return await this.userService.getTokensCreated(userAddress)
   }
 
   @Post('/uploadImage')

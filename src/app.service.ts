@@ -1,10 +1,9 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {Between, DataSource} from "typeorm";
-import {Comment, Token} from "./entities";
+import {Comment, Token, TokenBalance, UserAccount} from "./entities";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {GetTokensDto} from "./dto/token.dto";
 import {Trade} from "./entities";
-import * as moment from "moment";
 import {GetTradesDto} from "./dto/trade.dto";
 import {UserService} from "./user/user.service";
 
@@ -96,46 +95,23 @@ export class AppService {
         return identifiers[0].id
     }
 
-    // @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-    // async handleCron() {
-    //     const totalAttempts = 3
-    //     for(let i = 0; i < totalAttempts; i++) {
-    //         try {
-    //             const winnerTokenId = await this.getDailyWinnerTokenId()
-    //             this.logger.log(`Daily winner tokenId: ${winnerTokenId}`)
-    //             break;
-    //         } catch (e) {
-    //             this.logger.error(`Failed to get daily winner, attempt: ${i+1}/${totalAttempts}`, e)
-    //         }
-    //     }
-    // }
-
-    async getDailyWinnerTokenId(): Promise<string | null> {
-        const dateStart = moment().subtract(1, 'days').startOf('day')
-        const dateEnd = moment().subtract(1, 'day').endOf('day')
-
-        const tokensMap = new Map<string, bigint>()
-        const tokens = await this.getTokens({ offset: 0, limit: 1000 })
-        for(const token of tokens) {
-            const tokenSwaps = await this.dataSource.manager.find(Trade, {
-                where: {
-                    token: {
-                        id: token.id
-                    },
-                    createdAt: Between(dateStart.toDate(), dateEnd.toDate())
+    async getTokenHolder(tokenAddress: string, userAddress: string) {
+        return await this.dataSource.manager.findOne(TokenBalance, {
+            where: {
+                token: {
+                    address: tokenAddress.toLowerCase()
+                },
+                user: {
+                    address: userAddress.toLowerCase()
                 }
-            })
-            const totalAmount = tokenSwaps.reduce((acc, item) => acc += BigInt(item.amountOut), 0n)
-            tokensMap.set(token.id, totalAmount)
-        }
-        const sortedMapArray = ([...tokensMap.entries()]
-          .sort(([aKey, aValue], [bKey, bValue]) => {
-            return aValue - bValue > 0 ? -1 : 1
-        }));
-        if(sortedMapArray.length > 0) {
-            const [winnerTokenId] = sortedMapArray[0]
-            return winnerTokenId
-        }
-        return null
+            }
+        })
+    }
+
+    async createTokenHolder(token: Token, user: UserAccount) {
+        return await this.dataSource.manager.insert(TokenBalance, {
+            token,
+            user,
+        })
     }
 }

@@ -26,11 +26,17 @@ export class UserService {
     })
   }
 
-  async getTokensCreated(address: string) {
+  async getTokensCreated(userAddress: string) {
     return await this.dataSource.manager.find(Token, {
+      relations: ['user'],
       where: {
-        address: address.toLowerCase(),
+        user: {
+          address: userAddress.toLowerCase()
+        }
       },
+      order: {
+        createdAt: 'desc'
+      }
     })
   }
 }

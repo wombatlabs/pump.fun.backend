@@ -2,8 +2,8 @@ import {Injectable, Logger} from '@nestjs/common';
 import {Contract, ContractAbi, EventLog, Web3} from "web3";
 import {TokenMetadata, TradeEventLog, TradeType} from "../types";
 import axios from "axios";
-import process from "node:process";
-import {IndexerState, Token, Trade} from "../entities";
+import process from "process";
+import {IndexerState, Token, TokenBalance, Trade} from "../entities";
 import {ConfigService} from "@nestjs/config";
 import {UserService} from "../user/user.service";
 import {DataSource} from "typeorm";
@@ -15,6 +15,7 @@ export class IndexerService {
   private readonly logger = new Logger(IndexerService.name);
   private readonly web3: Web3
   private readonly tokenFactoryContract: Contract<ContractAbi>
+  private readonly tokenContract: Contract<ContractAbi>
   private readonly blocksIndexingRange = 1000
 
   constructor(
@@ -79,13 +80,13 @@ export class IndexerService {
 
   private async processTradeEvents(events: TradeEventLog[]) {
     for(const event of events) {
-      const { data, type } = event
+      const { type, data } = event
       const txnHash = data.transactionHash.toLowerCase()
       const blockNumber = Number(data.blockNumber)
       const values = data.returnValues
       const tokenAddress = (values['token'] as string).toLowerCase()
-      const amountIn = String(values['amount0In'] as bigint)
-      const amountOut = String(values['amount0Out'] as bigint)
+      const amountIn = values['amount0In'] as bigint
+      const amountOut = values['amount0Out'] as bigint
       const fee = String(values['fee'] as bigint)
       const timestamp = Number(values['timestamp'] as bigint)
 
@@ -108,6 +109,47 @@ export class IndexerService {
         process.exit(1)
       }
 
+      const tokenRepository = this.dataSource.manager.getRepository(Token)
+      const tokenHoldersRepository = this.dataSource.manager.getRepository(TokenBalance)
+
+      if(type === 'buy') {
+        try {
+          let holder = await this.appService.getTokenHolder(tokenAddress, userAddress)
+          if(!holder) {
+            await this.appService.createTokenHolder(token, user)
+            holder = await this.appService.getTokenHolder(tokenAddress, userAddress)
+          }
+          holder.balance = String(BigInt(holder.balance) + amountOut)
+          await tokenHoldersRepository.save(holder)
+
+          token.totalSupply = String(BigInt(token.totalSupply) + amountOut)
+          await tokenRepository.save(token)
+
+          this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}`)
+        } catch (e) {
+          this.logger.error(`Failed to process token holder balance [${type}]: tokenAddress=${tokenAddress}, userAddress=${userAddress}`, e)
+          throw new Error(e);
+        }
+      } else {
+        try {
+          let holder = await this.appService.getTokenHolder(tokenAddress, userAddress)
+          if(!holder) {
+            this.logger.log(`Failed to find token holder, exit`)
+            process.exit(1)
+          }
+          holder.balance = String(BigInt(holder.balance) - amountIn)
+          await tokenHoldersRepository.save(holder)
+
+          token.totalSupply = String(BigInt(token.totalSupply) - amountIn)
+          await tokenRepository.save(token)
+
+          this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}`)
+        } catch (e) {
+          this.logger.error(`Failed to process token holder balance [${type}]: tokenAddress=${tokenAddress}, userAddress=${userAddress}`, e)
+          throw new Error(e);
+        }
+      }
+
       try {
         await this.dataSource.manager.insert(Trade, {
           type,
@@ -115,8 +157,8 @@ export class IndexerService {
           blockNumber,
           user,
           token,
-          amountIn,
-          amountOut,
+          amountIn: String(amountIn),
+          amountOut: String(amountOut),
           fee,
           timestamp
         });

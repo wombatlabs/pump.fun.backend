@@ -41,6 +41,10 @@ export class Token {
   symbol: string;
 
   @ApiProperty()
+  @Column({ type: 'decimal', default: 0 })
+  totalSupply: string;
+
+  @ApiProperty()
   @Column()
   uri: string;
 
