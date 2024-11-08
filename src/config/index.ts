@@ -27,7 +27,8 @@ export default () => ({
   RPC_URL: process.env.RPC_URL || 'https://a.api.s0.t.hmny.io',
   RATE_LIMITER_TTL: parseInt(process.env.RATE_LIMITER_TTL) || 10000,
   RATE_LIMITER_LIMIT: parseInt(process.env.RATE_LIMITER_LIMIT) || 20,
-  PUMP_FUN_CONTRACT_ADDRESS: process.env.PUMP_FUN_CONTRACT_ADDRESS || '',
-  PUMP_FUN_INITIAL_BLOCK_NUMBER: parseInt(process.env.PUMP_FUN_INITIAL_BLOCK_NUMBER || '0'),
-  GOOGLE_CLOUD_CONFIG: getGoogleCloudConfig()
+  TOKEN_FACTORY_ADDRESS: process.env.TOKEN_FACTORY_ADDRESS || '',
+  INDEXER_INITIAL_BLOCK_NUMBER: parseInt(process.env.INDEXER_INITIAL_BLOCK_NUMBER || '0'),
+  GOOGLE_CLOUD_CONFIG: getGoogleCloudConfig(),
+  SERVICE_PRIVATE_KEY: process.env.SERVICE_PRIVATE_KEY || '',
 });

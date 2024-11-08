@@ -9,13 +9,14 @@ import {UserService} from "../user/user.service";
 import {DataSource} from "typeorm";
 import * as TokenFactoryABI from "../abi/TokenFactory.json";
 import {AppService} from "../app.service";
+import {Cron, CronExpression} from "@nestjs/schedule";
 
 @Injectable()
 export class IndexerService {
   private readonly logger = new Logger(IndexerService.name);
   private readonly web3: Web3
+  private readonly accountAddress: string
   private readonly tokenFactoryContract: Contract<ContractAbi>
-  private readonly tokenContract: Contract<ContractAbi>
   private readonly blocksIndexingRange = 1000
 
   constructor(
@@ -25,28 +26,32 @@ export class IndexerService {
     private dataSource: DataSource,
   ) {
     const rpcUrl = configService.get('RPC_URL')
-    const contractAddress = configService.get('PUMP_FUN_CONTRACT_ADDRESS')
-    const initialBlockNumber = configService.get('PUMP_FUN_INITIAL_BLOCK_NUMBER')
+    const contractAddress = configService.get('TOKEN_FACTORY_ADDRESS')
+    const initialBlockNumber = configService.get('INDEXER_INITIAL_BLOCK_NUMBER')
 
     if(!contractAddress) {
-      this.logger.error(`[PUMP_FUN_CONTRACT_ADDRESS] is missing but required, exit`)
+      this.logger.error(`[TOKEN_FACTORY_ADDRESS] is missing but required, exit`)
       process.exit(1)
     }
 
     if(!initialBlockNumber) {
-      this.logger.error(`[PUMP_FUN_INITIAL_BLOCK_NUMBER] is missing but required, exit`)
+      this.logger.error(`[INDEXER_INITIAL_BLOCK_NUMBER] is missing but required, exit`)
       process.exit(1)
     }
 
     this.logger.log(`Starting app service, RPC_URL=${
       rpcUrl
-    }, PUMP_FUN_CONTRACT_ADDRESS=${
+    }, TOKEN_FACTORY_ADDRESS=${
       contractAddress
-    }, PUMP_FUN_INITIAL_BLOCK_NUMBER=${
+    }, INDEXER_INITIAL_BLOCK_NUMBER=${
       initialBlockNumber
     }`)
 
     this.web3 = new Web3(rpcUrl);
+    const account = this.web3.eth.accounts.privateKeyToAccount(configService.get('SERVICE_PRIVATE_KEY'))
+    this.accountAddress = account.address
+    this.web3.eth.accounts.wallet.add(account);
+    this.logger.log(`Service account address=${account.address}`)
     this.tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, contractAddress);
     this.bootstrap().then(
       () => {
@@ -62,9 +67,9 @@ export class IndexerService {
         where: {}
       })
       if(!indexerState) {
-        const blockNumber = +this.configService.get<number>('PUMP_FUN_INITIAL_BLOCK_NUMBER')
+        const blockNumber = +this.configService.get<number>('INDEXER_INITIAL_BLOCK_NUMBER')
         if(!blockNumber) {
-          this.logger.error('[PUMP_FUN_INITIAL_BLOCK_NUMBER] is empty but required, exit')
+          this.logger.error('[INDEXER_INITIAL_BLOCK_NUMBER] is empty but required, exit')
           process.exit(1)
         }
         await this.dataSource.manager.insert(IndexerState, {
@@ -306,5 +311,42 @@ export class IndexerService {
     }
 
     this.eventsTrackingLoop()
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async callSetWinner() {
+    let txnHash = ''
+    let gasFees = 0n
+
+    for(let i = 0; i < 3; i++) {
+      try {
+        gasFees = await this.tokenFactoryContract.methods
+          .setWinner()
+          .estimateGas({ from: this.accountAddress });
+        const gasPrice = await this.web3.eth.getGasPrice();
+        const tx = {
+          from: this.accountAddress,
+          to: this.configService.get('TOKEN_FACTORY_ADDRESS'),
+          gas: gasFees,
+          gasPrice,
+          data: this.tokenFactoryContract.methods.setWinner().encodeABI(),
+        };
+        const signPromise = await this.web3.eth.accounts.signTransaction(tx, this.configService.get('SERVICE_PRIVATE_KEY'));
+        const sendTxn =
+          await this.web3.eth.sendSignedTransaction(
+            signPromise.rawTransaction,
+          );
+        txnHash = sendTxn.transactionHash.toString()
+        break;
+      } catch (e) {
+        this.logger.warn(`Failed to send setWinner transaction, attempt: ${(i + 1)} / 3:`, e)
+      }
+    }
+
+    if(txnHash) {
+      this.logger.log(`[setWinner] successfully called, transaction hash=${txnHash}, gasFees=${gasFees}`)
+    } else {
+      this.logger.error('Failed to call setWinner!')
+    }
   }
 }
