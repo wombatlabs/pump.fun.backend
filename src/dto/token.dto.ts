@@ -39,3 +39,17 @@ export class GetTokenBalancesDto {
   @IsString()
   offset: number;
 }
+
+export class GetTokenWinnersDto {
+  @ApiProperty({ type: Number, required: false, default: '100' })
+  // @Transform((limit) => limit.value.toNumber())
+  @Type(() => String)
+  @IsString()
+  limit: number;
+
+  @ApiProperty({ type: Number, required: false, default: '0' })
+  // @Transform((offset) => offset.value.toNumber())
+  @Type(() => String)
+  @IsString()
+  offset: number;
+}

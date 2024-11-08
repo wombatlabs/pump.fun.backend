@@ -4,6 +4,7 @@ import { IndexerState } from './indexer.state.entity';
 import { Trade } from './trade.entity';
 import { Comment } from './comment.entity';
 import { TokenBalance } from './token.balances.entity';
+import { TokenWinner } from './token.winner.entity';
 
 const entities = [
   UserAccount,
@@ -11,8 +12,9 @@ const entities = [
   IndexerState,
   Trade,
   Comment,
-  TokenBalance
+  TokenBalance,
+  TokenWinner
 ];
 
-export { UserAccount, Token, IndexerState, Trade, Comment, TokenBalance };
+export { UserAccount, Token, IndexerState, Trade, Comment, TokenBalance, TokenWinner };
 export default entities;

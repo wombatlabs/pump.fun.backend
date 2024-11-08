@@ -1,8 +1,8 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {Between, DataSource} from "typeorm";
-import {Comment, Token, TokenBalance, UserAccount} from "./entities";
+import {Comment, Token, TokenBalance, TokenWinner, UserAccount} from "./entities";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
-import {GetTokenBalancesDto, GetTokensDto} from "./dto/token.dto";
+import {GetTokenBalancesDto, GetTokensDto, GetTokenWinnersDto} from "./dto/token.dto";
 import {Trade} from "./entities";
 import {GetTradesDto} from "./dto/trade.dto";
 import {UserService} from "./user/user.service";
@@ -54,7 +54,6 @@ export class AppService {
 
     async getTokenBalances(dto: GetTokenBalancesDto){
         const { offset = 0, limit = 100 } = dto
-
         return this.dataSource.manager.find(TokenBalance, {
             where: {
                 token: {
@@ -66,6 +65,16 @@ export class AppService {
             },
             take: limit,
             skip: offset
+        })
+    }
+
+    async getTokenWinners(dto: GetTokenWinnersDto) {
+        return await this.dataSource.manager.find(TokenWinner, {
+            order: {
+                timestamp: 'desc'
+            },
+            take: dto.limit,
+            skip: dto.offset,
         })
     }
 

@@ -3,7 +3,7 @@ import {Contract, ContractAbi, EventLog, Web3} from "web3";
 import {TokenMetadata, TradeEventLog, TradeType} from "../types";
 import axios from "axios";
 import process from "process";
-import {IndexerState, Token, TokenBalance, Trade} from "../entities";
+import {IndexerState, Token, TokenBalance, TokenWinner, Trade} from "../entities";
 import {ConfigService} from "@nestjs/config";
 import {UserService} from "../user/user.service";
 import {DataSource} from "typeorm";
@@ -80,6 +80,42 @@ export class IndexerService {
     } catch (e) {
       this.logger.error(`Failed to bootstrap, exit`, e)
       process.exit(1)
+    }
+  }
+
+  private async processSetWinnerEvents(events: EventLog[]) {
+    for(const event of events) {
+      const txnHash = event.transactionHash.toLowerCase()
+      const blockNumber = Number(event.blockNumber)
+      const values = event.returnValues
+      const winnerAddress = (values['winner'] as string).toLowerCase()
+      const timestamp = String(values['timestamp'] as bigint)
+
+      const existedWinner = await this.dataSource.manager.findOne(TokenWinner, {
+        where: {
+          token: {
+            address: winnerAddress
+          },
+          timestamp
+        }
+      })
+
+      if(!existedWinner) {
+        const token = await this.appService.getTokenByAddress(winnerAddress)
+        if(!token) {
+          this.logger.error(`Winner token entry not found in database, winnerAddress=${winnerAddress} , exit`)
+          process.exit(1)
+        }
+        await this.dataSource.manager.insert(TokenWinner, {
+          token,
+          timestamp,
+          txnHash,
+          blockNumber
+        })
+        this.logger.log(`Added new token winner=${winnerAddress}, timestamp=${timestamp}`)
+      } else {
+        this.logger.warn(`Token winner=${winnerAddress}, timestamp=${timestamp} already exists, skip`)
+      }
     }
   }
 
@@ -208,6 +244,10 @@ export class IndexerService {
       }
 
       if(toBlock - fromBlock >= 1) {
+        const setWinnerEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
+          fromBlock, toBlock, topics: [ this.web3.utils.sha3('SetWinner(address,uint256)')],
+        }) as EventLog[];
+
         const tokenCreatedEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
           fromBlock,
           toBlock,
@@ -289,9 +329,10 @@ export class IndexerService {
           this.logger.log(`Create token: address=${tokenAddress}, name=${name}, symbol=${symbol}, uri=${uri}, creator=${creatorAddress}, txnHash=${txnHash}`);
         }
 
+        await this.processSetWinnerEvents(setWinnerEvents)
         await this.processTradeEvents(tradeEvents)
 
-        this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens=${tokenCreatedEvents.length}, trade=${[...buyEvents, ...sellEvents].length} (buy=${buyEvents.length}, sell=${sellEvents.length})`)
+        this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens=${tokenCreatedEvents.length}, trade=${[...buyEvents, ...sellEvents].length} (buy=${buyEvents.length}, sell=${sellEvents.length}), setWinner=${setWinnerEvents.length}`)
       } else {
         // Wait for blockchain
         toBlock = fromBlockParam - 1
