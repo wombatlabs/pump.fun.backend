@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {IsString} from 'class-validator';
+import {IsOptional, IsString} from 'class-validator';
 import {Transform, Type} from "class-transformer";
 
 export class GetTokensDto {
@@ -22,21 +22,30 @@ export class GetTokensDto {
 }
 
 export class GetTokenBalancesDto {
-  @ApiProperty({ type: String, required: true })
-    @Type(() => String)
-    @IsString()
-  tokenAddress: string;
+  @ApiProperty({ type: String, required: false })
+  // @Type(() => String)
+  @IsString()
+  @IsOptional()
+  tokenAddress?: string;
+
+  @ApiProperty({ type: String, required: false })
+  // @Type(() => String)
+  @IsString()
+  @IsOptional()
+  userAddress?: string;
 
   @ApiProperty({ type: Number, required: false, default: '100' })
   // @Transform((limit) => limit.value.toNumber())
   @Type(() => String)
   @IsString()
+  @IsOptional()
   limit: number;
 
   @ApiProperty({ type: Number, required: false, default: '0' })
   // @Transform((offset) => offset.value.toNumber())
   @Type(() => String)
   @IsString()
+  @IsOptional()
   offset: number;
 }
 

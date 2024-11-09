@@ -1,5 +1,5 @@
 import {Injectable, Logger} from '@nestjs/common';
-import {Between, DataSource} from "typeorm";
+import {MoreThan, DataSource} from "typeorm";
 import {Comment, Token, TokenBalance, TokenWinner, UserAccount} from "./entities";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {GetTokenBalancesDto, GetTokensDto, GetTokenWinnersDto} from "./dto/token.dto";
@@ -57,11 +57,15 @@ export class AppService {
         return this.dataSource.manager.find(TokenBalance, {
             where: {
                 token: {
-                    address: dto.tokenAddress.toLowerCase()
-                }
+                    address: dto.tokenAddress
+                },
+                user: {
+                    address: dto.userAddress
+                },
+                balance: MoreThan('0')
             },
             order: {
-                balance: 'desc'
+                createdAt: 'desc'
             },
             take: limit,
             skip: offset

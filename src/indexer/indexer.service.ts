@@ -10,6 +10,7 @@ import {DataSource} from "typeorm";
 import * as TokenFactoryABI from "../abi/TokenFactory.json";
 import {AppService} from "../app.service";
 import {Cron, CronExpression} from "@nestjs/schedule";
+import {ZeroAddress} from "ethers";
 
 @Injectable()
 export class IndexerService {
@@ -90,6 +91,11 @@ export class IndexerService {
       const values = event.returnValues
       const winnerAddress = (values['winner'] as string).toLowerCase()
       const timestamp = String(values['timestamp'] as bigint)
+
+      if(winnerAddress === ZeroAddress) {
+        this.logger.warn(`winnerAddress=${winnerAddress}, txnHash=${txnHash}, skip`)
+        continue;
+      }
 
       const existedWinner = await this.dataSource.manager.findOne(TokenWinner, {
         where: {
