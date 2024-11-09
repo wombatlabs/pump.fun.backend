@@ -6,7 +6,7 @@ import process from "process";
 import {IndexerState, Token, TokenBalance, TokenWinner, Trade} from "../entities";
 import {ConfigService} from "@nestjs/config";
 import {UserService} from "../user/user.service";
-import {DataSource} from "typeorm";
+import {DataSource, EntityManager} from "typeorm";
 import * as TokenFactoryABI from "../abi/TokenFactory.json";
 import {AppService} from "../app.service";
 import {Cron, CronExpression} from "@nestjs/schedule";
@@ -85,7 +85,7 @@ export class IndexerService {
     }
   }
 
-  private async processSetWinnerEvent(event: EventLog) {
+  private async processSetWinnerEvent(event: EventLog, transactionalEntityManager: EntityManager) {
     const txnHash = event.transactionHash.toLowerCase()
     const blockNumber = Number(event.blockNumber)
     const values = event.returnValues
@@ -97,7 +97,7 @@ export class IndexerService {
       return
     }
 
-    const existedWinner = await this.dataSource.manager.findOne(TokenWinner, {
+    const existedWinner = await transactionalEntityManager.findOne(TokenWinner, {
       where: {
         token: {
           address: winnerAddress
@@ -107,12 +107,12 @@ export class IndexerService {
     })
 
     if(!existedWinner) {
-      const token = await this.appService.getTokenByAddress(winnerAddress)
+      const token = await this.appService.getTokenByAddress(winnerAddress, transactionalEntityManager)
       if(!token) {
         this.logger.error(`Winner token entry not found in database, winnerAddress=${winnerAddress} , exit`)
         process.exit(1)
       }
-      await this.dataSource.manager.insert(TokenWinner, {
+      await transactionalEntityManager.insert(TokenWinner, {
         token,
         timestamp,
         txnHash,
@@ -124,7 +124,7 @@ export class IndexerService {
     }
   }
 
-  private async processCreateTokenEvent(event: EventLog) {
+  private async processCreateTokenEvent(event: EventLog, transactionalEntityManager: EntityManager) {
     const txnHash = event.transactionHash.toLowerCase()
     const values = event.returnValues
     const tokenAddress = (values['token'] as string).toLowerCase()
@@ -142,18 +142,18 @@ export class IndexerService {
       this.logger.error(`Failed to get token uri data, uri=${uri}, tokenAddress=${tokenAddress}`, e)
     }
 
-    let user = await this.userService.getUserByAddress(creatorAddress)
+    let user = await this.userService.getUserByAddress(creatorAddress, transactionalEntityManager)
     if(!user) {
       this.logger.warn(`Creator address=${creatorAddress} is missing,, adding new user...`)
-      await this.userService.addNewUser({ address: creatorAddress })
-      user = await this.userService.getUserByAddress(creatorAddress)
+      await this.userService.addNewUser({ address: creatorAddress }, transactionalEntityManager)
+      user = await this.userService.getUserByAddress(creatorAddress, transactionalEntityManager)
       if(!user) {
         this.logger.error(`Failed to create user=${creatorAddress}, exit`)
         process.exit(1)
       }
     }
 
-    await this.dataSource.manager.insert(Token, {
+    await transactionalEntityManager.insert(Token, {
       txnHash,
       address: tokenAddress,
       blockNumber: Number(event.blockNumber),
@@ -167,7 +167,7 @@ export class IndexerService {
     this.logger.log(`Create token: address=${tokenAddress}, name=${name}, symbol=${symbol}, uri=${uri}, creator=${creatorAddress}, txnHash=${txnHash}`);
   }
 
-  private async processTradeEvent(type: TradeType, event: EventLog) {
+  private async processTradeEvent(type: TradeType, event: EventLog, transactionalEntityManager: EntityManager) {
     const txnHash = event.transactionHash.toLowerCase()
     const blockNumber = Number(event.blockNumber)
     const values = event.returnValues
@@ -179,32 +179,32 @@ export class IndexerService {
 
     const txn = await this.web3.eth.getTransaction(txnHash)
     const userAddress = txn.from.toLowerCase()
-    let user = await this.userService.getUserByAddress(userAddress)
+    let user = await this.userService.getUserByAddress(userAddress, transactionalEntityManager)
     if(!user) {
       this.logger.warn(`Trade event: failed to get user by address="${userAddress}". Creating new user...`)
-      await this.userService.addNewUser({ address: userAddress })
-      user = await this.userService.getUserByAddress(userAddress)
+      await this.userService.addNewUser({ address: userAddress }, transactionalEntityManager)
+      user = await this.userService.getUserByAddress(userAddress, transactionalEntityManager)
       if(!user) {
         this.logger.error(`Failed to create user by address: ${userAddress}:`)
         process.exit(1)
       }
     }
 
-    const token = await this.appService.getTokenByAddress(tokenAddress)
+    const token = await this.appService.getTokenByAddress(tokenAddress, transactionalEntityManager)
     if(!token) {
       this.logger.error(`Trade event: failed to get token by address="${tokenAddress}", event tx hash="${event.transactionHash}", exit`)
       process.exit(1)
     }
 
-    const tokenRepository = this.dataSource.manager.getRepository(Token)
-    const tokenHoldersRepository = this.dataSource.manager.getRepository(TokenBalance)
+    const tokenRepository = transactionalEntityManager.getRepository(Token)
+    const tokenHoldersRepository = transactionalEntityManager.getRepository(TokenBalance)
 
     if(type === 'buy') {
       try {
-        let holder = await this.appService.getTokenHolder(tokenAddress, userAddress)
+        let holder = await this.appService.getTokenHolder(tokenAddress, userAddress, transactionalEntityManager)
         if(!holder) {
-          await this.appService.createTokenHolder(token, user)
-          holder = await this.appService.getTokenHolder(tokenAddress, userAddress)
+          await this.appService.createTokenHolder(token, user, transactionalEntityManager)
+          holder = await this.appService.getTokenHolder(tokenAddress, userAddress, transactionalEntityManager)
         }
         holder.balance = String(BigInt(holder.balance) + amountOut)
         await tokenHoldersRepository.save(holder)
@@ -220,7 +220,7 @@ export class IndexerService {
       }
     } else {
       try {
-        let holder = await this.appService.getTokenHolder(tokenAddress, userAddress)
+        let holder = await this.appService.getTokenHolder(tokenAddress, userAddress, transactionalEntityManager)
         if(!holder) {
           this.logger.log(`Failed to find token holder, exit`)
           process.exit(1)
@@ -239,7 +239,7 @@ export class IndexerService {
     }
 
     try {
-      await this.dataSource.manager.insert(Trade, {
+      await transactionalEntityManager.insert(Trade, {
         type,
         txnHash,
         blockNumber,
@@ -282,6 +282,7 @@ export class IndexerService {
 
     let fromBlock = fromBlockParam
     let toBlock = fromBlock
+
     try {
       const blockchainBlockNumber = +(String(await this.web3.eth.getBlockNumber()))
       toBlock = fromBlock + this.blocksIndexingRange - 1
@@ -332,27 +333,29 @@ export class IndexerService {
             return Number(a.data.transactionIndex) - Number(b.data.transactionIndex)
           })
 
-        for(const protocolEvent of protocolEvents) {
-          const { type, data } = protocolEvent
-          switch (type) {
-            case 'create_token': {
-              await this.processCreateTokenEvent(data)
-              break;
-            }
-            case 'buy': {
-              await this.processTradeEvent(TradeType.buy, data)
-              break;
-            }
-            case 'sell': {
-              await this.processTradeEvent(TradeType.sell, data)
-              break;
-            }
-            case 'set_winner': {
-              await this.processSetWinnerEvent(data)
-              break;
+        await this.dataSource.manager.transaction(async (transactionalEntityManager) => {
+          for(const protocolEvent of protocolEvents) {
+            const { type, data } = protocolEvent
+            switch (type) {
+              case 'create_token': {
+                await this.processCreateTokenEvent(data, transactionalEntityManager)
+                break;
+              }
+              case 'buy': {
+                await this.processTradeEvent(TradeType.buy, data, transactionalEntityManager)
+                break;
+              }
+              case 'sell': {
+                await this.processTradeEvent(TradeType.sell, data, transactionalEntityManager)
+                break;
+              }
+              case 'set_winner': {
+                await this.processSetWinnerEvent(data, transactionalEntityManager)
+                break;
+              }
             }
           }
-        }
+        })
 
         this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens=${tokenCreatedEvents.length}, trade=${[...buyEvents, ...sellEvents].length} (buy=${buyEvents.length}, sell=${sellEvents.length}), setWinner=${setWinnerEvents.length}`)
       } else {

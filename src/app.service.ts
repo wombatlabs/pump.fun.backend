@@ -1,5 +1,5 @@
 import {Injectable, Logger} from '@nestjs/common';
-import {MoreThan, DataSource} from "typeorm";
+import {MoreThan, DataSource, EntityManager} from "typeorm";
 import {Comment, Token, TokenBalance, TokenWinner, UserAccount} from "./entities";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {GetTokenBalancesDto, GetTokensDto, GetTokenWinnersDto} from "./dto/token.dto";
@@ -97,8 +97,8 @@ export class AppService {
         })
     }
 
-    async getTokenByAddress(address: string){
-        return await this.dataSource.manager.findOne(Token, {
+    async getTokenByAddress(address: string, entityManager?: EntityManager){
+        return await (entityManager || this.dataSource.manager).findOne(Token, {
             where: {
                 address
             }
@@ -125,8 +125,8 @@ export class AppService {
         return identifiers[0].id
     }
 
-    async getTokenHolder(tokenAddress: string, userAddress: string) {
-        return await this.dataSource.manager.findOne(TokenBalance, {
+    async getTokenHolder(tokenAddress: string, userAddress: string, entityManager?: EntityManager) {
+        return await (entityManager || this.dataSource.manager).findOne(TokenBalance, {
             where: {
                 token: {
                     address: tokenAddress.toLowerCase()
@@ -138,8 +138,8 @@ export class AppService {
         })
     }
 
-    async createTokenHolder(token: Token, user: UserAccount) {
-        return await this.dataSource.manager.insert(TokenBalance, {
+    async createTokenHolder(token: Token, user: UserAccount, entityManager?: EntityManager) {
+        return await (entityManager || this.dataSource.manager).insert(TokenBalance, {
             token,
             user,
         })
