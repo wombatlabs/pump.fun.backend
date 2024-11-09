@@ -85,13 +85,12 @@ export class AppController {
 
   @Post('/user')
   async addUser(@Body() dto: AddUserDto) {
-    console.log('dto', dto)
     const user = await this.userService.getUserByAddress(dto.address)
     if(user) {
       throw new BadRequestException('User already exists')
     }
     const userId = await this.userService.addNewUser(dto);
-    this.logger.log(`Created new user: address=${dto.address}, id=${userId}`)
+    this.logger.log(`New user created: address=${dto.address}, id=${userId}`)
     return await this.userService.getUserByAddress(dto.address)
   }
 

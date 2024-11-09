@@ -12,8 +12,3 @@ export interface TokenMetadata {
   description: string
   image: string
 }
-
-export interface TradeEventLog {
-  type: TradeType
-  data: EventLog
-}

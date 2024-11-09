@@ -1,6 +1,6 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {Contract, ContractAbi, EventLog, Web3} from "web3";
-import {TokenMetadata, TradeEventLog, TradeType} from "../types";
+import {TokenMetadata, TradeType} from "../types";
 import axios from "axios";
 import process from "process";
 import {IndexerState, Token, TokenBalance, TokenWinner, Trade} from "../entities";
@@ -85,137 +85,175 @@ export class IndexerService {
     }
   }
 
-  private async processSetWinnerEvents(events: EventLog[]) {
-    for(const event of events) {
-      const txnHash = event.transactionHash.toLowerCase()
-      const blockNumber = Number(event.blockNumber)
-      const values = event.returnValues
-      const winnerAddress = (values['winner'] as string).toLowerCase()
-      const timestamp = String(values['timestamp'] as bigint)
+  private async processSetWinnerEvent(event: EventLog) {
+    const txnHash = event.transactionHash.toLowerCase()
+    const blockNumber = Number(event.blockNumber)
+    const values = event.returnValues
+    const winnerAddress = (values['winner'] as string).toLowerCase()
+    const timestamp = String(values['timestamp'] as bigint)
 
-      if(winnerAddress === ZeroAddress) {
-        this.logger.warn(`winnerAddress=${winnerAddress}, txnHash=${txnHash}, skip`)
-        continue;
+    if(winnerAddress === ZeroAddress) {
+      this.logger.warn(`winnerAddress=${winnerAddress}, txnHash=${txnHash}, skip`)
+      return
+    }
+
+    const existedWinner = await this.dataSource.manager.findOne(TokenWinner, {
+      where: {
+        token: {
+          address: winnerAddress
+        },
+        timestamp
       }
+    })
 
-      const existedWinner = await this.dataSource.manager.findOne(TokenWinner, {
-        where: {
-          token: {
-            address: winnerAddress
-          },
-          timestamp
-        }
+    if(!existedWinner) {
+      const token = await this.appService.getTokenByAddress(winnerAddress)
+      if(!token) {
+        this.logger.error(`Winner token entry not found in database, winnerAddress=${winnerAddress} , exit`)
+        process.exit(1)
+      }
+      await this.dataSource.manager.insert(TokenWinner, {
+        token,
+        timestamp,
+        txnHash,
+        blockNumber
       })
-
-      if(!existedWinner) {
-        const token = await this.appService.getTokenByAddress(winnerAddress)
-        if(!token) {
-          this.logger.error(`Winner token entry not found in database, winnerAddress=${winnerAddress} , exit`)
-          process.exit(1)
-        }
-        await this.dataSource.manager.insert(TokenWinner, {
-          token,
-          timestamp,
-          txnHash,
-          blockNumber
-        })
-        this.logger.log(`Added new token winner=${winnerAddress}, timestamp=${timestamp}`)
-      } else {
-        this.logger.warn(`Token winner=${winnerAddress}, timestamp=${timestamp} already exists, skip`)
-      }
+      this.logger.log(`Added new token winner=${winnerAddress}, timestamp=${timestamp}`)
+    } else {
+      this.logger.warn(`Token winner=${winnerAddress}, timestamp=${timestamp} already exists, skip`)
     }
   }
 
-  private async processTradeEvents(events: TradeEventLog[]) {
-    for(const event of events) {
-      const { type, data } = event
-      const txnHash = data.transactionHash.toLowerCase()
-      const blockNumber = Number(data.blockNumber)
-      const values = data.returnValues
-      const tokenAddress = (values['token'] as string).toLowerCase()
-      const amountIn = values['amount0In'] as bigint
-      const amountOut = values['amount0Out'] as bigint
-      const fee = String(values['fee'] as bigint)
-      const timestamp = Number(values['timestamp'] as bigint)
+  private async processCreateTokenEvent(event: EventLog) {
+    const txnHash = event.transactionHash.toLowerCase()
+    const values = event.returnValues
+    const tokenAddress = (values['token'] as string).toLowerCase()
+    const name = values['name'] as string
+    const symbol = values['symbol'] as string
+    const uri = values['uri'] as string
+    const creatorAddress = (values['creator'] as string).toLowerCase()
+    const timestamp = Number(values['timestamp'] as bigint)
 
-      const txn = await this.web3.eth.getTransaction(txnHash)
-      const userAddress = txn.from.toLowerCase()
-      let user = await this.userService.getUserByAddress(userAddress)
+    let uriData = null
+    try {
+      const { data } = await axios.get<TokenMetadata>(uri)
+      uriData = data
+    } catch (e) {
+      this.logger.error(`Failed to get token uri data, uri=${uri}, tokenAddress=${tokenAddress}`, e)
+    }
+
+    let user = await this.userService.getUserByAddress(creatorAddress)
+    if(!user) {
+      this.logger.warn(`Creator address=${creatorAddress} is missing,, adding new user...`)
+      await this.userService.addNewUser({ address: creatorAddress })
+      user = await this.userService.getUserByAddress(creatorAddress)
       if(!user) {
-        this.logger.warn(`Trade event: failed to get user by address="${userAddress}". Creating new user...`)
-        await this.userService.addNewUser({ address: userAddress })
-        user = await this.userService.getUserByAddress(userAddress)
-        if(!user) {
-          this.logger.error(`Failed to create user by address: ${userAddress}:`)
-          process.exit(1)
-        }
-      }
-
-      const token = await this.appService.getTokenByAddress(tokenAddress)
-      if(!token) {
-        this.logger.error(`Trade event: failed to get token by address="${tokenAddress}", event tx hash="${data.transactionHash}", exit`)
+        this.logger.error(`Failed to create user=${creatorAddress}, exit`)
         process.exit(1)
       }
+    }
 
-      const tokenRepository = this.dataSource.manager.getRepository(Token)
-      const tokenHoldersRepository = this.dataSource.manager.getRepository(TokenBalance)
+    await this.dataSource.manager.insert(Token, {
+      txnHash,
+      address: tokenAddress,
+      blockNumber: Number(event.blockNumber),
+      name,
+      symbol,
+      timestamp,
+      user,
+      uri,
+      uriData,
+    });
+    this.logger.log(`Create token: address=${tokenAddress}, name=${name}, symbol=${symbol}, uri=${uri}, creator=${creatorAddress}, txnHash=${txnHash}`);
+  }
 
-      if(type === 'buy') {
-        try {
-          let holder = await this.appService.getTokenHolder(tokenAddress, userAddress)
-          if(!holder) {
-            await this.appService.createTokenHolder(token, user)
-            holder = await this.appService.getTokenHolder(tokenAddress, userAddress)
-          }
-          holder.balance = String(BigInt(holder.balance) + amountOut)
-          await tokenHoldersRepository.save(holder)
+  private async processTradeEvent(type: TradeType, event: EventLog) {
+    const txnHash = event.transactionHash.toLowerCase()
+    const blockNumber = Number(event.blockNumber)
+    const values = event.returnValues
+    const tokenAddress = (values['token'] as string).toLowerCase()
+    const amountIn = values['amount0In'] as bigint
+    const amountOut = values['amount0Out'] as bigint
+    const fee = String(values['fee'] as bigint)
+    const timestamp = Number(values['timestamp'] as bigint)
 
-          token.totalSupply = String(BigInt(token.totalSupply) + amountOut)
-          token.price = (new Decimal(amountIn.toString()).div(10).div(new Decimal(amountOut.toString()))).toFixed(10)
-          await tokenRepository.save(token)
-
-          this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}, token price: ${token.price}`)
-        } catch (e) {
-          this.logger.error(`Failed to process token holder balance [${type}]: tokenAddress=${tokenAddress}, userAddress=${userAddress}`, e)
-          throw new Error(e);
-        }
-      } else {
-        try {
-          let holder = await this.appService.getTokenHolder(tokenAddress, userAddress)
-          if(!holder) {
-            this.logger.log(`Failed to find token holder, exit`)
-            process.exit(1)
-          }
-          holder.balance = String(BigInt(holder.balance) - amountIn)
-          await tokenHoldersRepository.save(holder)
-
-          token.totalSupply = String(BigInt(token.totalSupply) - amountIn)
-          token.price = (new Decimal(amountOut.toString()).div(10).div(new Decimal(amountIn.toString()))).toFixed(10)
-          await tokenRepository.save(token)
-          this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}, token price=${token.price}`)
-        } catch (e) {
-          this.logger.error(`Failed to process token holder balance [${type}]: tokenAddress=${tokenAddress}, userAddress=${userAddress}`, e)
-          throw new Error(e);
-        }
+    const txn = await this.web3.eth.getTransaction(txnHash)
+    const userAddress = txn.from.toLowerCase()
+    let user = await this.userService.getUserByAddress(userAddress)
+    if(!user) {
+      this.logger.warn(`Trade event: failed to get user by address="${userAddress}". Creating new user...`)
+      await this.userService.addNewUser({ address: userAddress })
+      user = await this.userService.getUserByAddress(userAddress)
+      if(!user) {
+        this.logger.error(`Failed to create user by address: ${userAddress}:`)
+        process.exit(1)
       }
+    }
 
+    const token = await this.appService.getTokenByAddress(tokenAddress)
+    if(!token) {
+      this.logger.error(`Trade event: failed to get token by address="${tokenAddress}", event tx hash="${event.transactionHash}", exit`)
+      process.exit(1)
+    }
+
+    const tokenRepository = this.dataSource.manager.getRepository(Token)
+    const tokenHoldersRepository = this.dataSource.manager.getRepository(TokenBalance)
+
+    if(type === 'buy') {
       try {
-        await this.dataSource.manager.insert(Trade, {
-          type,
-          txnHash,
-          blockNumber,
-          user,
-          token,
-          amountIn: String(amountIn),
-          amountOut: String(amountOut),
-          fee,
-          timestamp
-        });
-        this.logger.log(`Trade [${type}]: userAddress=${userAddress}, token=${tokenAddress}, amountIn=${amountIn}, amountOut=${amountOut}, fee=${fee}, timestamp=${timestamp}, txnHash=${txnHash}`)
+        let holder = await this.appService.getTokenHolder(tokenAddress, userAddress)
+        if(!holder) {
+          await this.appService.createTokenHolder(token, user)
+          holder = await this.appService.getTokenHolder(tokenAddress, userAddress)
+        }
+        holder.balance = String(BigInt(holder.balance) + amountOut)
+        await tokenHoldersRepository.save(holder)
+
+        token.totalSupply = String(BigInt(token.totalSupply) + amountOut)
+        token.price = (new Decimal(amountIn.toString()).div(10).div(new Decimal(amountOut.toString()))).toFixed(10)
+        await tokenRepository.save(token)
+
+        this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}, token price: ${token.price}`)
       } catch (e) {
-        this.logger.error(`Failed to process trade [${type}]: userAddress=${userAddress}, token=${tokenAddress} txnHash=${txnHash}`, e)
+        this.logger.error(`Failed to process token holder balance [${type}]: tokenAddress=${tokenAddress}, userAddress=${userAddress}`, e)
         throw new Error(e);
       }
+    } else {
+      try {
+        let holder = await this.appService.getTokenHolder(tokenAddress, userAddress)
+        if(!holder) {
+          this.logger.log(`Failed to find token holder, exit`)
+          process.exit(1)
+        }
+        holder.balance = String(BigInt(holder.balance) - amountIn)
+        await tokenHoldersRepository.save(holder)
+
+        token.totalSupply = String(BigInt(token.totalSupply) - amountIn)
+        token.price = (new Decimal(amountOut.toString()).div(10).div(new Decimal(amountIn.toString()))).toFixed(10)
+        await tokenRepository.save(token)
+        this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}, token price=${token.price}`)
+      } catch (e) {
+        this.logger.error(`Failed to process token holder balance [${type}]: tokenAddress=${tokenAddress}, userAddress=${userAddress}`, e)
+        throw new Error(e);
+      }
+    }
+
+    try {
+      await this.dataSource.manager.insert(Trade, {
+        type,
+        txnHash,
+        blockNumber,
+        user,
+        token,
+        amountIn: String(amountIn),
+        amountOut: String(amountOut),
+        fee,
+        timestamp
+      });
+      this.logger.log(`Trade [${type}]: userAddress=${userAddress}, token=${tokenAddress}, amountIn=${amountIn}, amountOut=${amountOut}, fee=${fee}, timestamp=${timestamp}, txnHash=${txnHash}`)
+    } catch (e) {
+      this.logger.error(`Failed to process trade [${type}]: userAddress=${userAddress}, token=${tokenAddress} txnHash=${txnHash}`, e)
+      throw new Error(e);
     }
   }
 
@@ -280,65 +318,41 @@ export class IndexerService {
           ],
         }) as EventLog[];
 
-        const tradeEvents: TradeEventLog[] = [...buyEvents].map(data => {
-          return {
-            type: TradeType.buy,
-            data
-          }
-        }).concat([...sellEvents].map(data => {
-          return {
-            type: TradeType.sell,
-            data
-          }
-        })).sort((a, b) => {
-          return +(a.data.returnValues.timestamp.toString()) - +(b.data.returnValues.timestamp.toString())
-        })
+        // concat and sort all events by block number and transaction index
+        const protocolEvents: { data: EventLog; type: string }[] = tokenCreatedEvents
+          .map(data => ({ type: 'create_token', data }))
+          .concat(...buyEvents.map(data => ({ type: 'buy', data })))
+          .concat(...sellEvents.map(data => ({ type: 'sell', data })))
+          .concat(...setWinnerEvents.map(data => ({ type: 'set_winner', data })))
+          .sort((a, b) => {
+            const blockNumberDiff = Number(a.data.blockNumber) - Number(b.data.blockNumber)
+            if(blockNumberDiff !== 0) {
+              return blockNumberDiff
+            }
+            return Number(a.data.transactionIndex) - Number(b.data.transactionIndex)
+          })
 
-        for(const tokenCreated of tokenCreatedEvents) {
-          const txnHash = tokenCreated.transactionHash.toLowerCase()
-          const values = tokenCreated.returnValues
-          const tokenAddress = (values['token'] as string).toLowerCase()
-          const name = values['name'] as string
-          const symbol = values['symbol'] as string
-          const uri = values['uri'] as string
-          const creatorAddress = (values['creator'] as string).toLowerCase()
-          const timestamp = Number(values['timestamp'] as bigint)
-
-          let uriData = null
-          try {
-            const { data } = await axios.get<TokenMetadata>(uri)
-            uriData = data
-          } catch (e) {
-            this.logger.error(`Failed to get token uri data, uri=${uri}, tokenAddress=${tokenAddress}`, e)
-          }
-
-          let user = await this.userService.getUserByAddress(creatorAddress)
-          if(!user) {
-            this.logger.warn(`Creator address=${creatorAddress} is missing,, adding new user...`)
-            await this.userService.addNewUser({ address: creatorAddress })
-            user = await this.userService.getUserByAddress(creatorAddress)
-            if(!user) {
-              this.logger.error(`Failed to create user=${creatorAddress}, exit`)
-              process.exit(1)
+        for(const protocolEvent of protocolEvents) {
+          const { type, data } = protocolEvent
+          switch (type) {
+            case 'create_token': {
+              await this.processCreateTokenEvent(data)
+              break;
+            }
+            case 'buy': {
+              await this.processTradeEvent(TradeType.buy, data)
+              break;
+            }
+            case 'sell': {
+              await this.processTradeEvent(TradeType.sell, data)
+              break;
+            }
+            case 'set_winner': {
+              await this.processSetWinnerEvent(data)
+              break;
             }
           }
-
-          await this.dataSource.manager.insert(Token, {
-            txnHash,
-            address: tokenAddress,
-            blockNumber: Number(tokenCreated.blockNumber),
-            name,
-            symbol,
-            timestamp,
-            user,
-            uri,
-            uriData,
-          });
-          this.logger.log(`Create token: address=${tokenAddress}, name=${name}, symbol=${symbol}, uri=${uri}, creator=${creatorAddress}, txnHash=${txnHash}`);
         }
-
-        await this.processSetWinnerEvents(setWinnerEvents)
-        await this.processTradeEvents(tradeEvents)
 
         this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens=${tokenCreatedEvents.length}, trade=${[...buyEvents, ...sellEvents].length} (buy=${buyEvents.length}, sell=${sellEvents.length}), setWinner=${setWinnerEvents.length}`)
       } else {
