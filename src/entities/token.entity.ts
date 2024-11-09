@@ -5,14 +5,24 @@ import {
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
-  ManyToMany,
-  JoinTable, AfterLoad, AfterInsert, AfterUpdate, OneToOne, ManyToOne
+  JoinTable,
+  ManyToOne, AfterUpdate, AfterInsert, AfterLoad
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import {Comment} from "./comment.entity";
 import {UserAccount} from "./user-account.entity";
 import {TokenMetadata} from "../types";
 import {Trade} from "./trade.entity";
+import Decimal from "decimal.js";
+
+export class ColumnNumericTransformer {
+  to(data: string): string {
+    return data;
+  }
+  from(data: number): string {
+    return new Decimal(data).toFixed()
+  }
+}
 
 @Entity({ name: 'tokens' })
 export class Token {
@@ -41,10 +51,6 @@ export class Token {
   symbol: string;
 
   @ApiProperty()
-  @Column({ type: 'decimal', default: 0 })
-  totalSupply: string;
-
-  @ApiProperty()
   @Column()
   uri: string;
 
@@ -68,6 +74,26 @@ export class Token {
   @OneToMany(() => Trade, (trade) => trade.token)
   @JoinTable()
   trades: Trade[]
+
+  @ApiProperty()
+  @Column({ type: 'decimal', default: 0 })
+  totalSupply: string;
+
+  @ApiProperty()
+  @Column({ type: 'double precision', default: 0, transformer: new ColumnNumericTransformer() })
+  price: string;
+
+  protected marketCap: String;
+
+  @ApiProperty()
+  @AfterInsert()
+  @AfterUpdate()
+  @AfterLoad()
+  updateMarketCap() {
+    this.marketCap = new Decimal(this.price)
+      .mul(new Decimal(this.totalSupply).div(10 ** 18))
+      .toFixed()
+  }
 
   @ApiProperty()
   @CreateDateColumn({ name: 'createdAt' })

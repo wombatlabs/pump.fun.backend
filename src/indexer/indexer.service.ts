@@ -11,6 +11,7 @@ import * as TokenFactoryABI from "../abi/TokenFactory.json";
 import {AppService} from "../app.service";
 import {Cron, CronExpression} from "@nestjs/schedule";
 import {ZeroAddress} from "ethers";
+import Decimal from "decimal.js";
 
 @Injectable()
 export class IndexerService {
@@ -170,9 +171,10 @@ export class IndexerService {
           await tokenHoldersRepository.save(holder)
 
           token.totalSupply = String(BigInt(token.totalSupply) + amountOut)
+          token.price = (new Decimal(amountIn.toString()).div(10).div(new Decimal(amountOut.toString()))).toFixed(10)
           await tokenRepository.save(token)
 
-          this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}`)
+          this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}, token price: ${token.price}`)
         } catch (e) {
           this.logger.error(`Failed to process token holder balance [${type}]: tokenAddress=${tokenAddress}, userAddress=${userAddress}`, e)
           throw new Error(e);
@@ -188,9 +190,9 @@ export class IndexerService {
           await tokenHoldersRepository.save(holder)
 
           token.totalSupply = String(BigInt(token.totalSupply) - amountIn)
+          token.price = (new Decimal(amountOut.toString()).div(10).div(new Decimal(amountIn.toString()))).toFixed(10)
           await tokenRepository.save(token)
-
-          this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}`)
+          this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}, token price=${token.price}`)
         } catch (e) {
           this.logger.error(`Failed to process token holder balance [${type}]: tokenAddress=${tokenAddress}, userAddress=${userAddress}`, e)
           throw new Error(e);
