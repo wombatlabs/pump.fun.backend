@@ -12,3 +12,10 @@ export interface TokenMetadata {
   description: string
   image: string
 }
+
+export interface Candle {
+  open: string
+  close: string
+  start: number
+  end: number
+}

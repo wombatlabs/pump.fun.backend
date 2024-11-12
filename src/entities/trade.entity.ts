@@ -9,6 +9,16 @@ import { ApiProperty } from '@nestjs/swagger';
 import {Token} from "./token.entity";
 import {TradeType} from "../types";
 import {UserAccount} from "./user-account.entity";
+import Decimal from "decimal.js";
+
+class ColumnNumericTransformer {
+  to(data: string): string {
+    return data;
+  }
+  from(data: number): string {
+    return new Decimal(data).toFixed()
+  }
+}
 
 @Entity({ name: 'trades' })
 export class Trade {
@@ -45,6 +55,10 @@ export class Trade {
   @ApiProperty()
   @Column({ type: 'decimal' })
   amountOut: string;
+
+  @ApiProperty()
+  @Column({ type: 'double precision', default: 0, transformer: new ColumnNumericTransformer() })
+  price: string;
 
   @ApiProperty()
   @Column({ type: 'decimal' })

@@ -16,7 +16,7 @@ import {SkipThrottle} from "@nestjs/throttler";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {AppService} from "./app.service";
 import {GetTokenBalancesDto, GetTokensDto, GetTokenWinnersDto} from "./dto/token.dto";
-import {GetTradesDto} from "./dto/trade.dto";
+import {GetCandlesDto, GetTradesDto} from "./dto/trade.dto";
 import {AddUserDto} from "./dto/user.dto";
 import {UserService} from "./user/user.service";
 import {FileInterceptor} from "@nestjs/platform-express";
@@ -59,6 +59,11 @@ export class AppController {
   getWinners(@Query() dto: GetTokenWinnersDto) {
     return this.appService.getTokenWinners(dto)
   }
+
+  // @Get('/token/candles')
+  // async getCandles(@Query() dto: GetCandlesDto) {
+  //   return await this.appService.getCandles(dto)
+  // }
 
   @Get('/comments')
   getComments(@Query() dto: GetCommentsDto) {

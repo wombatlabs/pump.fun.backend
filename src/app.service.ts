@@ -4,8 +4,10 @@ import {Comment, Token, TokenBalance, TokenWinner, UserAccount} from "./entities
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {GetTokenBalancesDto, GetTokensDto, GetTokenWinnersDto} from "./dto/token.dto";
 import {Trade} from "./entities";
-import {GetTradesDto} from "./dto/trade.dto";
+import {GetCandlesDto, GetTradesDto} from "./dto/trade.dto";
 import {UserService} from "./user/user.service";
+import {Candle} from "./types";
+import Decimal from "decimal.js";
 
 @Injectable()
 export class AppService {
@@ -96,6 +98,25 @@ export class AppService {
             }
         })
     }
+
+    // async getCandles(dto: GetCandlesDto){
+    //     let intervalMillis = 30 * 60 * 1000;
+    //     const tradeRepository = this.dataSource.getRepository(Trade)
+    //     const candlesRaw = await tradeRepository.manager.query<{
+    //         time: string
+    //         high_price: number
+    //         low_price: number
+    //         volume: string
+    //     }>(`
+    //         select DATE_TRUNC('minute', to_timestamp(timestamp)) AS time,
+    //         MAX(price) AS high_price,
+    //         MIN(price) AS low_price,
+    //         SUM(amountIn) AS volume
+    //         FROM trades
+    //         GROUP BY candle_time
+    //     `, [])
+    //     return candles
+    // }
 
     async getTokenByAddress(address: string, entityManager?: EntityManager){
         return await (entityManager || this.dataSource.manager).findOne(Token, {

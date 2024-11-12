@@ -24,3 +24,11 @@ export class GetTradesDto {
   @IsOptional()
   offset: number;
 }
+
+export class GetCandlesDto {
+  @ApiProperty({ type: String, required: true })
+  @Transform((address) => address ? address.value.trim().toLowerCase() : address)
+  @Type(() => String)
+  @IsString()
+  tokenAddress: string;
+}

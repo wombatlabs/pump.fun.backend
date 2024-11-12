@@ -199,6 +199,7 @@ export class IndexerService {
     const tokenRepository = transactionalEntityManager.getRepository(Token)
     const tokenHoldersRepository = transactionalEntityManager.getRepository(TokenBalance)
 
+    let price = '0'
     if(type === 'buy') {
       try {
         let holder = await this.appService.getTokenHolder(tokenAddress, userAddress, transactionalEntityManager)
@@ -209,8 +210,9 @@ export class IndexerService {
         holder.balance = String(BigInt(holder.balance) + amountOut)
         await tokenHoldersRepository.save(holder)
 
+        price = (new Decimal(amountIn.toString()).div(10).div(new Decimal(amountOut.toString()))).toFixed(10)
         token.totalSupply = String(BigInt(token.totalSupply) + amountOut)
-        token.price = (new Decimal(amountIn.toString()).div(10).div(new Decimal(amountOut.toString()))).toFixed(10)
+        token.price = price
         await tokenRepository.save(token)
 
         this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}, token price: ${token.price}`)
@@ -228,8 +230,9 @@ export class IndexerService {
         holder.balance = String(BigInt(holder.balance) - amountIn)
         await tokenHoldersRepository.save(holder)
 
+        price = (new Decimal(amountOut.toString()).div(10).div(new Decimal(amountIn.toString()))).toFixed(10)
         token.totalSupply = String(BigInt(token.totalSupply) - amountIn)
-        token.price = (new Decimal(amountOut.toString()).div(10).div(new Decimal(amountIn.toString()))).toFixed(10)
+        token.price = price
         await tokenRepository.save(token)
         this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}, token price=${token.price}`)
       } catch (e) {
@@ -247,6 +250,7 @@ export class IndexerService {
         token,
         amountIn: String(amountIn),
         amountOut: String(amountOut),
+        price,
         fee,
         timestamp
       });

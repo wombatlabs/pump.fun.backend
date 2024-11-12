@@ -15,7 +15,7 @@ import {TokenMetadata} from "../types";
 import {Trade} from "./trade.entity";
 import Decimal from "decimal.js";
 
-export class ColumnNumericTransformer {
+class ColumnNumericTransformer {
   to(data: string): string {
     return data;
   }
