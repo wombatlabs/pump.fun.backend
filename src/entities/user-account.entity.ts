@@ -44,3 +44,14 @@ export class UserAccount {
   @UpdateDateColumn({ name: 'updatedAt' })
   updatedAt: Date;
 }
+
+export class JwtUserAccount {
+  @ApiProperty()
+  address: string;
+
+  @ApiProperty()
+  username: string;
+
+  @ApiProperty()
+  createdAt: Date;
+}

@@ -45,3 +45,7 @@ coverage
 # Editor-based HTTP Client requests
 .idea/httpRequests
 fly.toml
+
+/keypair/**.sh
+/keypair/**.pem
+/keypair/**.txt

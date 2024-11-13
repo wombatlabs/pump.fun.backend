@@ -145,7 +145,7 @@ export class IndexerService {
     let user = await this.userService.getUserByAddress(creatorAddress, transactionalEntityManager)
     if(!user) {
       this.logger.warn(`Creator address=${creatorAddress} is missing,, adding new user...`)
-      await this.userService.addNewUser({ address: creatorAddress }, transactionalEntityManager)
+      await this.userService.createUser({ address: creatorAddress }, transactionalEntityManager)
       user = await this.userService.getUserByAddress(creatorAddress, transactionalEntityManager)
       if(!user) {
         this.logger.error(`Failed to create user=${creatorAddress}, exit`)
@@ -182,7 +182,7 @@ export class IndexerService {
     let user = await this.userService.getUserByAddress(userAddress, transactionalEntityManager)
     if(!user) {
       this.logger.warn(`Trade event: failed to get user by address="${userAddress}". Creating new user...`)
-      await this.userService.addNewUser({ address: userAddress }, transactionalEntityManager)
+      await this.userService.createUser({ address: userAddress }, transactionalEntityManager)
       user = await this.userService.getUserByAddress(userAddress, transactionalEntityManager)
       if(!user) {
         this.logger.error(`Failed to create user by address: ${userAddress}:`)

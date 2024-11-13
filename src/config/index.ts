@@ -1,7 +1,25 @@
 import * as process from 'process';
+import {resolve as pathResolve} from "path";
+import {existsSync, readFileSync} from "fs";
 
 const parseStringArray = (value: string) =>
   value.split(',').map(item => item.trim().toLowerCase()).filter(_ => _)
+
+const readTestPrivateKey = () => {
+  const filePath = pathResolve(__dirname, '..', '../keypair/private.pem')
+  if(existsSync(filePath)) {
+    return readFileSync(pathResolve(__dirname, '..', '../keypair/private.pem'))
+  }
+  return ''
+}
+
+const readTestPublicKey = () => {
+  const filePath = pathResolve(__dirname, '..', '../keypair/public.pem')
+  if(existsSync(filePath)) {
+    return readFileSync(filePath)
+  }
+  return ''
+}
 
 const getGoogleCloudConfig = () => {
   return {
@@ -24,6 +42,10 @@ export default () => ({
   version: process.env.npm_package_version || '0.0.1',
   name: process.env.npm_package_name || '',
   port: parseInt(process.env.PORT, 10) || 3000,
+  JWT_EXPIRATION_DATE: process.env.JWT_EXPIRATION_DATE || '600s',
+  PRIVATE_KEY: process.env.PRIVATE_KEY || readTestPrivateKey(),
+  PUBLIC_KEY: process.env.PUBLIC_KEY || readTestPublicKey(),
+  REFRESH_EXPIRATION_DATE: process.env.REFRESH_EXPIRATION_DATE || '3600s',
   RPC_URL: process.env.RPC_URL || 'https://a.api.s0.t.hmny.io',
   RATE_LIMITER_TTL: parseInt(process.env.RATE_LIMITER_TTL) || 10000,
   RATE_LIMITER_LIMIT: parseInt(process.env.RATE_LIMITER_LIMIT) || 20,

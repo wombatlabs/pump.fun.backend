@@ -12,9 +12,24 @@ import {ScheduleModule} from "@nestjs/schedule";
 import { UserService } from './user/user.service';
 import { GcloudService } from './gcloud/gcloud.service';
 import { IndexerService } from './indexer/indexer.service';
+import { UserController } from './user/user.controller';
+import {JwtModule} from "@nestjs/jwt";
+import config from './config/index'
 
 @Module({
   imports: [
+    JwtModule.register({
+      global: true,
+      // secret: config().JWT_SECRET,
+      privateKey: config().PRIVATE_KEY,
+      publicKey: config().PUBLIC_KEY,
+      signOptions: {
+        algorithm: 'RS256'
+      },
+      verifyOptions: {
+        algorithms: ['RS256']
+      }
+    }),
     ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
@@ -32,7 +47,7 @@ import { IndexerService } from './indexer/indexer.service';
     }]),
     PrometheusModule.register(),
   ],
-  controllers: [AppController],
+  controllers: [AppController, UserController],
   providers: [
     AppService,
     {

@@ -88,31 +88,6 @@ export class AppController {
     return this.appService.getTrades(dto)
   }
 
-  @Post('/user')
-  async addUser(@Body() dto: AddUserDto) {
-    const user = await this.userService.getUserByAddress(dto.address)
-    if(user) {
-      throw new BadRequestException('User already exists')
-    }
-    const userId = await this.userService.addNewUser(dto);
-    this.logger.log(`New user created: address=${dto.address}, id=${userId}`)
-    return await this.userService.getUserByAddress(dto.address)
-  }
-
-  @Get('/user/:address')
-  async getUserByAddress(@Param('address') userAddress: string) {
-    const user = await this.userService.getUserByAddress(userAddress)
-    if(!user) {
-      throw new NotFoundException('User not found')
-    }
-    return user
-  }
-
-  @Get('/user/:address/tokens/created')
-  async getUserTokensCreated(@Param('address') userAddress: string) {
-    return await this.userService.getTokensCreated(userAddress)
-  }
-
   @Post('/uploadImage')
   @UseInterceptors(FileInterceptor('file'))
   async uploadImage(@UploadedFile() uploadedFile: Express.Multer.File, @Headers() headers) {
