@@ -30,13 +30,31 @@ export class UserController {
     private readonly jwtService: JwtService,
   ) {}
 
+  @Post('/')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @UsePipes(new ValidationPipe(validationCfg()))
+  async addUser(@Request() req) {
+    if(!req.user) {
+      throw new BadRequestException('InvalidJWT')
+    }
+    const { address } = plainToInstance(JwtUserAccount, req.user)
+    const user = await this.userService.getUserByAddress(address)
+    if(user) {
+      throw new BadRequestException('User already exists')
+    }
+    const userId = await this.userService.createUser({ address });
+    this.logger.log(`New user created: address=${address}, id=${userId}`)
+    return await this.userService.getUserByAddress(address)
+  }
+
   @HttpCode(HttpStatus.OK)
-  @Post('sign-in')
+  @Post('nonce')
   @ApiOperation({
     summary: 'Request one-time nonce',
   })
   @UsePipes(new ValidationPipe(validationCfg()))
-  async signInRequest(@Body() dto: SignInRequestDto) {
+  async getNonce(@Body() dto: SignInRequestDto) {
     const { address } = dto
 
     const existedRequest = await this.userService.getSignInRequest(address);
@@ -96,6 +114,32 @@ export class UserController {
     throw new BadRequestException('Invalid signature or address')
   }
 
+  @Get('/sign-in')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @UsePipes(new ValidationPipe(validationCfg()))
+  async signIn(@Request() req) {
+    if(!req.user) {
+      throw new BadRequestException('InvalidJWT')
+    }
+    const { address } = plainToInstance(JwtUserAccount, req.user)
+    const user = await this.userService.getUserByAddress(address)
+    if(!user) {
+      throw new NotFoundException('User not found')
+    }
+    const payload: JwtUserAccount = {
+      address: user.address,
+      username: user.username,
+      createdAt: user.createdAt
+    }
+    // Refresh tokens
+    const tokens = await this.userService.getTokens(payload)
+    return {
+      tokens,
+      user
+    }
+  }
+
   @Post('/refresh')
   @ApiOperation({
     summary: 'Update refresh token',
@@ -111,25 +155,6 @@ export class UserController {
     } catch (e) {}
 
     throw new UnauthorizedException();
-  }
-
-  @Post('/')
-  @UseGuards(AuthGuard)
-  @ApiBearerAuth()
-  @UsePipes(new ValidationPipe(validationCfg()))
-  async addUser(@Request() req) {
-    if(!req.user) {
-      throw new BadRequestException('InvalidJWT')
-    }
-    console.log('req.user', req.user)
-    const { address } = plainToInstance(JwtUserAccount, req.user)
-    const user = await this.userService.getUserByAddress(address)
-    if(user) {
-      throw new BadRequestException('User already exists')
-    }
-    const userId = await this.userService.createUser({ address });
-    this.logger.log(`New user created: address=${address}, id=${userId}`)
-    return await this.userService.getUserByAddress(address)
   }
 
   @Get('/:address')
