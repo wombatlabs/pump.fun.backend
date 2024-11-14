@@ -3,10 +3,10 @@ import {IsString} from 'class-validator';
 import {Transform, Type} from "class-transformer";
 
 export class AddTokenMetadataDto {
-  @ApiProperty({ type: String, required: true })
-  @Type(() => String)
-  @IsString()
-  userAddress: string;
+  // @ApiProperty({ type: String, required: true })
+  // @Type(() => String)
+  // @IsString()
+  // userAddress: string;
 
   @ApiProperty({ type: String, required: true })
   @Type(() => String)

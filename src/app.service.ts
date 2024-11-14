@@ -134,9 +134,9 @@ export class AppService {
         })
     }
 
-    async addComment(dto: AddCommentDto): Promise<string> {
+    async addComment(userAddress: string, dto: AddCommentDto): Promise<string> {
         const token = await this.getTokenByAddress(dto.tokenAddress)
-        const user = await this.userService.getUserByAddress(dto.userAddress)
+        const user = await this.userService.getUserByAddress(userAddress)
         const comment = this.dataSource.manager.create(Comment, {
             ...dto,
             token,

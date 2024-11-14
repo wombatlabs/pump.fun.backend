@@ -9,11 +9,11 @@ export class AddCommentDto {
   @IsString()
   tokenAddress: string;
 
-  @ApiProperty({ type: String, required: true })
-  @Transform((address) => address.value.trim().toLowerCase())
-  @Type(() => String)
-  @IsString()
-  userAddress: string;
+  // @ApiProperty({ type: String, required: true })
+  // @Transform((address) => address.value.trim().toLowerCase())
+  // @Type(() => String)
+  // @IsString()
+  // userAddress: string;
 
   @ApiProperty({ type: String, required: true })
   @Transform((address) => address.value.trim().toLowerCase())

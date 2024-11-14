@@ -8,9 +8,9 @@ import {
   Param,
   Post,
   Query, UploadedFile, UseInterceptors,
-  Headers
+  Headers, UseGuards, Request
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import {ApiBearerAuth, ApiTags} from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import {SkipThrottle} from "@nestjs/throttler";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
@@ -23,6 +23,9 @@ import {FileInterceptor} from "@nestjs/platform-express";
 import {GcloudService} from "./gcloud/gcloud.service";
 import { v4 as uuidv4 } from 'uuid';
 import {AddTokenMetadataDto} from "./dto/metadata.dto";
+import {AuthGuard} from "./common/auth.guard";
+import {plainToInstance} from "class-transformer";
+import {JwtUserAccount} from "./entities/user-account.entity";
 
 @SkipThrottle()
 @ApiTags('app')
@@ -71,16 +74,22 @@ export class AppController {
   }
 
   @Post('/comment')
-  async addComment(@Body() dto: AddCommentDto) {
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  async addComment(@Request() req, @Body() dto: AddCommentDto) {
+    if(!req.user) {
+      throw new BadRequestException('InvalidJWT')
+    }
+    const { address } = plainToInstance(JwtUserAccount, req.user)
     const token = await this.appService.getTokenByAddress(dto.tokenAddress)
     if(!token) {
       throw new NotFoundException('Token not found')
     }
-    const user = await this.userService.getUserByAddress(dto.userAddress)
+    const user = await this.userService.getUserByAddress(address)
     if(!user) {
       throw new NotFoundException('User not found')
     }
-    return await this.appService.addComment(dto)
+    return await this.appService.addComment(address, dto)
   }
 
   @Get('/trades')
@@ -89,19 +98,34 @@ export class AppController {
   }
 
   @Post('/uploadImage')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
   @UseInterceptors(FileInterceptor('file'))
-  async uploadImage(@UploadedFile() uploadedFile: Express.Multer.File, @Headers() headers) {
-    const userAddress = headers['meta_user_address']
+  async uploadImage(
+    @Request() req,
+    @UploadedFile() uploadedFile: Express.Multer.File,
+    @Headers() headers
+  ) {
+    if(!req.user) {
+      throw new BadRequestException('InvalidJWT')
+    }
+    const { address } = plainToInstance(JwtUserAccount, req.user)
     const uuid = uuidv4()
     const imageUrl = await this.gCloudService.uploadImage(uploadedFile, uuid)
-    this.logger.log(`Image uploaded, imageUrl=${imageUrl}, userAddress=${userAddress}`)
+    this.logger.log(`Image uploaded, imageUrl=${imageUrl}, userAddress=${address}`)
     return imageUrl
   }
 
   @Post('/metadata')
-  async addMetadata(@Body() dto: AddTokenMetadataDto) {
-    let uuid = ''
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  async addMetadata(@Request() req, @Body() dto: AddTokenMetadataDto) {
+    if(!req.user) {
+      throw new BadRequestException('InvalidJWT')
+    }
+    const { address } = plainToInstance(JwtUserAccount, req.user)
 
+    let uuid = ''
     if(!dto.image) {
       throw new BadRequestException('Image property is missing')
     }
@@ -118,7 +142,7 @@ export class AppController {
     }
 
     const metadataUrl = await this.gCloudService.uploadMetadata(dto, uuid)
-    this.logger.log(`Metadata uploaded, url=${metadataUrl}, content: ${JSON.stringify(dto)}`)
+    this.logger.log(`Metadata uploaded, userAddress=${address} url=${metadataUrl}, content: ${JSON.stringify(dto)}`)
     return metadataUrl
   }
 }
