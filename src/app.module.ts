@@ -18,16 +18,19 @@ import config from './config/index'
 
 @Module({
   imports: [
-    JwtModule.register({
-      global: true,
-      // secret: config().JWT_SECRET,
-      privateKey: config().PRIVATE_KEY,
-      publicKey: config().PUBLIC_KEY,
-      signOptions: {
-        algorithm: 'RS256'
-      },
-      verifyOptions: {
-        algorithms: ['RS256']
+    JwtModule.registerAsync({
+      useFactory: async () => {
+        return {
+          global: true,
+          privateKey: config().JWT_PRIVATE_KEY,
+          publicKey: config().JWT_PUBLIC_KEY,
+          signOptions: {
+            algorithm: 'RS256'
+          },
+          verifyOptions: {
+            algorithms: ['RS256']
+          }
+        }
       }
     }),
     ScheduleModule.forRoot(),
