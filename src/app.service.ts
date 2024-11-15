@@ -1,13 +1,11 @@
 import {Injectable, Logger} from '@nestjs/common';
-import {MoreThan, DataSource, EntityManager} from "typeorm";
-import {Comment, Token, TokenBalance, TokenWinner, UserAccount} from "./entities";
+import {DataSource, EntityManager, MoreThan} from "typeorm";
+import {Comment, Token, TokenBalance, TokenWinner, Trade, UserAccount} from "./entities";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {GetTokenBalancesDto, GetTokensDto, GetTokenWinnersDto} from "./dto/token.dto";
-import {Trade} from "./entities";
 import {GetCandlesDto, GetTradesDto} from "./dto/trade.dto";
 import {UserService} from "./user/user.service";
 import {Candle} from "./types";
-import Decimal from "decimal.js";
 
 @Injectable()
 export class AppService {
@@ -99,24 +97,32 @@ export class AppService {
         })
     }
 
-    // async getCandles(dto: GetCandlesDto){
-    //     let intervalMillis = 30 * 60 * 1000;
-    //     const tradeRepository = this.dataSource.getRepository(Trade)
-    //     const candlesRaw = await tradeRepository.manager.query<{
-    //         time: string
-    //         high_price: number
-    //         low_price: number
-    //         volume: string
-    //     }>(`
-    //         select DATE_TRUNC('minute', to_timestamp(timestamp)) AS time,
-    //         MAX(price) AS high_price,
-    //         MIN(price) AS low_price,
-    //         SUM(amountIn) AS volume
-    //         FROM trades
-    //         GROUP BY candle_time
-    //     `, [])
-    //     return candles
-    // }
+    async getCandles(dto: GetCandlesDto){
+        const query = this.dataSource.getRepository(Trade)
+          .createQueryBuilder('trades')
+          .leftJoin('trades.token', 'token')
+          .select([
+            `DATE_TRUNC('minute', to_timestamp(trades.timestamp)) AS time`,
+            `MAX(trades.price)::text AS "highPrice"`,
+            `MIN(trades.price)::text AS "lowPrice"`,
+            `SUM(trades.amountIn)::text AS volume`
+          ])
+          .where({
+              token: {
+                  address: dto.tokenAddress
+              }
+          })
+          .groupBy('time')
+          .orderBy({
+              time: 'DESC'
+          })
+          .offset(0)
+          .limit(100)
+
+        // console.log('query:', query.getQuery())
+
+        return await query.getRawMany<Candle[]>()
+    }
 
     async getTokenByAddress(address: string, entityManager?: EntityManager){
         return await (entityManager || this.dataSource.manager).findOne(Token, {

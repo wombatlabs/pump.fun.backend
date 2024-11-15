@@ -63,10 +63,10 @@ export class AppController {
     return this.appService.getTokenWinners(dto)
   }
 
-  // @Get('/token/candles')
-  // async getCandles(@Query() dto: GetCandlesDto) {
-  //   return await this.appService.getCandles(dto)
-  // }
+  @Get('/token/candles')
+  async getCandles(@Query() dto: GetCandlesDto) {
+    return await this.appService.getCandles(dto)
+  }
 
   @Get('/comments')
   getComments(@Query() dto: GetCommentsDto) {

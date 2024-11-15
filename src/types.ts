@@ -14,8 +14,8 @@ export interface TokenMetadata {
 }
 
 export interface Candle {
-  open: string
-  close: string
-  start: number
-  end: number
+  highPrice: string
+  lowPrice: string
+  volume: string
+  time: string
 }
