@@ -17,7 +17,7 @@ import {UserService} from "./user.service";
 import {JwtTokenDto, JwtTokensDto} from "../dto/jwt.dto";
 import {instanceToPlain, plainToInstance} from "class-transformer";
 import {JwtService} from "@nestjs/jwt";
-import {AddUserDto} from "../dto/user.dto";
+import {UpdateUserDto} from "../dto/user.dto";
 import {JwtUserAccount} from "../entities/user-account.entity";
 import {AuthGuard} from "../common/auth.guard";
 
@@ -169,5 +169,27 @@ export class UserController {
   @Get('/:address/tokens/created')
   async getUserTokensCreated(@Param('address') userAddress: string) {
     return await this.userService.getTokensCreated(userAddress)
+  }
+
+  @Post('/update')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @UsePipes(new ValidationPipe(validationCfg()))
+  async updateUser(@Request() req, @Body() dto: UpdateUserDto) {
+    if(!req.user) {
+      throw new BadRequestException('InvalidJWT')
+    }
+    const { address } = plainToInstance(JwtUserAccount, req.user)
+    const user = await this.userService.getUserByAddress(address)
+    if(!user) {
+      throw new NotFoundException('User not found')
+    }
+    const existedUsername = await this.userService.getUserByUsername(dto.username)
+    if(existedUsername) {
+      throw new BadRequestException('Username already exist')
+    }
+    const updatedUser = await this.userService.updateUser(address, dto);
+    this.logger.log(`User ${address} successfully updated: "${JSON.stringify(updatedUser)}"`)
+    return updatedUser
   }
 }

@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import {Injectable, NotFoundException} from '@nestjs/common';
 import {DataSource, EntityManager} from "typeorm";
 import {SignInRequestEntity, Token, UserAccount} from "../entities";
-import {AddUserDto, GetUsersDto} from "../dto/user.dto";
+import {AddUserDto, UpdateUserDto} from "../dto/user.dto";
 import {generateNonce} from "../utils";
 import {VerifySignatureDto} from "../dto/account.dto";
 import {verifyMessage} from "ethers";
@@ -83,19 +83,45 @@ export class UserService {
   }
 
   async createUser(dto: AddUserDto, entityManager?: EntityManager) {
-    const { address } = dto
+    const address = dto.address.toLowerCase()
+    let username = address.replaceAll('0x', '').slice(0, 6)
+
+    const existedUsername = await this.getUserByUsername(username, entityManager)
+    if(existedUsername) {
+      username = address
+    }
 
     const data = await (entityManager || this.dataSource.manager).insert(UserAccount, {
-      address: address.toLowerCase(),
-      username: address.replaceAll('0x', '').slice(0, 6)
+      address,
+      username
     })
     return data.identifiers[0].id
+  }
+
+  async updateUser(address: string, dto: UpdateUserDto) {
+    const user = await this.dataSource.manager.findOne(UserAccount, {
+      where: {
+        address
+      }
+    })
+    return await this.dataSource.getRepository(UserAccount).save({
+      ...user,
+      username: dto.username,
+    })
   }
 
   async getUserByAddress(address: string, entityManager?: EntityManager) {
     return await (entityManager || this.dataSource.manager).findOne(UserAccount, {
       where: {
         address: address.toLowerCase(),
+      },
+    })
+  }
+
+  async getUserByUsername(username: string, entityManager?: EntityManager) {
+    return await (entityManager || this.dataSource.manager).findOne(UserAccount, {
+      where: {
+        username,
       },
     })
   }

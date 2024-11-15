@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {IsString} from 'class-validator';
+import {IsString, MaxLength} from 'class-validator';
 import {Transform, Type} from "class-transformer";
 
 export class AddUserDto {
@@ -22,4 +22,15 @@ export class GetUsersDto {
   @Type(() => String)
   @IsString()
   offset: number;
+}
+
+const UsernameMaxLength = 20
+
+export class UpdateUserDto {
+  @ApiProperty({ type: String, required: true, default: '' })
+  @Transform((address) => address.value.trim().toLowerCase())
+  @MaxLength(UsernameMaxLength, { message: `username must not exceed ${UsernameMaxLength} characters` })
+  @Type(() => String)
+  @IsString()
+  username: string;
 }

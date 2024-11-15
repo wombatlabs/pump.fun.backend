@@ -6,7 +6,6 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
   ManyToMany,
-  JoinTable, ManyToOne
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import {Token} from "./token.entity";
@@ -24,7 +23,7 @@ export class UserAccount {
   address: string;
 
   @ApiProperty()
-  @Column()
+  @Column({ unique: true })
   username: string;
 
   @OneToMany(() => Token, (token) => token.user)
