@@ -3,6 +3,9 @@
 ### Google Cloud Storage
 https://console.cloud.google.com/storage/browser/pump-fun-metadata
 
+### Generate RSA keys and set env variables
+https://stackoverflow.com/a/68730638/7311367
+
 ### Recreate DB
 ```shell
 flyctl scale count 0
@@ -21,7 +24,9 @@ create database pump_fun_backend;
 
 \q
 
-flyctl deploy
+// set new env variables if needed
+
+flyctl deploy --ha=false
 
 flyctl scale count 1
 ```
