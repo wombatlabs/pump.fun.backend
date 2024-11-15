@@ -53,17 +53,17 @@ export class AppController {
     return this.appService.getTokens(dto)
   }
 
-  @Get('/token/balances')
+  @Get('/balances')
   getTokenHolders(@Query() dto: GetTokenBalancesDto) {
     return this.appService.getTokenBalances(dto)
   }
 
-  @Get('/token/winners')
+  @Get('/winners')
   getWinners(@Query() dto: GetTokenWinnersDto) {
     return this.appService.getTokenWinners(dto)
   }
 
-  @Get('/token/candles')
+  @Get('/candles')
   async getCandles(@Query() dto: GetCandlesDto) {
     return await this.appService.getCandles(dto)
   }
