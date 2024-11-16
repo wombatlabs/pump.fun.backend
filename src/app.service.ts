@@ -35,7 +35,6 @@ export class AppService {
         const query = this.dataSource.getRepository(Token)
           .createQueryBuilder('token')
           .leftJoinAndSelect('token.user', 'user')
-          // .leftJoinAndSelect('token.comments', 'comments')
           .offset(offset)
           .limit(limit)
           .orderBy({
@@ -43,10 +42,10 @@ export class AppService {
           })
 
         if(search) {
-            query.where('token.name = :name', { name: search })
-              .orWhere('token.address = :address', { address: search })
-              .orWhere('token.symbol = :symbol', { symbol: search })
-              .orWhere('token.txnHash = :txnHash', { txnHash: search })
+            query.where('LOWER(token.name) LIKE LOWER(:name)', { name: `%${search}%` })
+              .orWhere('LOWER(token.address) = LOWER(:address)', { address: search })
+              .orWhere('LOWER(token.symbol) LIKE LOWER(:symbol)', { symbol: `%${search}%` })
+              .orWhere('LOWER(token.txnHash) = LOWER(:txnHash)', { txnHash: search })
         }
 
         return await query.getMany()
