@@ -35,6 +35,5 @@ lerna-debug.log*
 !.vscode/extensions.json
 
 .env
-/keypair/**.sh
 /keypair/**.pem
 /keypair/**.txt
