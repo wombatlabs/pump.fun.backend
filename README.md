@@ -1,5 +1,10 @@
 ### Pump Fun Backend
 
+### What this app do
+- Indexing PumpFun TokenFactory events and storing them in the database
+- Processing client requests (REST API)
+- Client authentication and provision of JWT tokens
+
 ### Env variables
 
 | Env variable name            | Required | Default | Description                                                                                  |                                                                                                                                                                                                                                                                                                                                                                                                                                                
