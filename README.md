@@ -1,5 +1,19 @@
 ### Pump Fun Backend
 
+### Env variables
+
+| Env variable name            | Required | Default | Description                                                                                  |                                                                                                                                                                                                                                                                                                                                                                                                                                                
+|------------------------------|----------|---------|----------------------------------------------------------------------------------------------|
+| NODE_ENV                     | false    | -       | Available values: "development", "production" ]                                              |
+| PORT                         | false    | 3000    | Application port                                                                             |
+| DATABASE_URL                 | true     | -       | Postgres DB connection string                                                                |
+| TOKEN_FACTORY_ADDRESS        | true     | -       | Pump Fun TokenFactory address                                                                |
+| INDEXER_INITIAL_BLOCK_NUMBER | true     | 0       | Block number on which Pump Fun TokenFactory was created. Required only for the first launch. |
+| GOOGLE_CLOUD_PRIVATE_KEY     | true     | -       | Google Cloud Storage private key, starting with "-----BEGIN PRIVATE KEY-----..."             |
+| SERVICE_PRIVATE_KEY          | true     | -       | Harmony Mainnet account private key. Required to send `setWinner` transaction once a day.    |
+| JWT_PRIVATE_KEY              | true     | -       | JWT Private key in Base64 format (see "JWT keypair" for details)                             |
+| JWT_PUBLIC_KEY               | true     | -       | JWT Public key in Base64 format (see "JWT keypair" for details)                              |
+
 ### Authorization with MetaMask
 1. Client initiates the login process and send POST `/user/nonce` with user address in request body
 2. Backend generates a one-time nonce associated with user address
@@ -7,6 +21,14 @@
 4. Client send signed message to Backend via POST `/user/verify`
 5. Backend verifies the signature
 6. If the signature and nonce are valid, Backend generate JWT tokens to maintain the session for the user. The nonce is invalidated to prevent reuse.
+
+List of endpoints that require JWT accessToken (`Authorization: Bearer <JWTAccessToken>`):
+- POST /comment
+- POST /uploadImage
+- POST /metadata
+- POST /user
+- GET /user/sign-in
+- POST /user/update
 
 ### Token metadata
 Token metadata, such as .json file and token images, stored in GCS:
