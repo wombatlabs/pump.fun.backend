@@ -9,7 +9,7 @@
 | DATABASE_URL                 | true     | -       | Postgres DB connection string                                                                |
 | TOKEN_FACTORY_ADDRESS        | true     | -       | Pump Fun TokenFactory address                                                                |
 | INDEXER_INITIAL_BLOCK_NUMBER | true     | 0       | Block number on which Pump Fun TokenFactory was created. Required only for the first launch. |
-| GOOGLE_CLOUD_PRIVATE_KEY     | true     | -       | Google Cloud Storage private key, starting with "-----BEGIN PRIVATE KEY-----..."             |
+| GOOGLE_CLOUD_PRIVATE_KEY     | true     | -       | Google Cloud Storage private key                                                             |
 | SERVICE_PRIVATE_KEY          | true     | -       | Harmony Mainnet account private key. Required to send `setWinner` transaction once a day.    |
 | JWT_PRIVATE_KEY              | true     | -       | JWT Private key in Base64 format (see "JWT keypair" for details)                             |
 | JWT_PUBLIC_KEY               | true     | -       | JWT Public key in Base64 format (see "JWT keypair" for details)                              |
