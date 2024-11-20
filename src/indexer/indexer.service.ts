@@ -9,9 +9,9 @@ import {UserService} from "../user/user.service";
 import {DataSource, EntityManager} from "typeorm";
 import * as TokenFactoryABI from "../abi/TokenFactory.json";
 import {AppService} from "../app.service";
-import {Cron, CronExpression} from "@nestjs/schedule";
 import {ZeroAddress} from "ethers";
 import Decimal from "decimal.js";
+import {Cron, CronExpression} from "@nestjs/schedule";
 
 @Injectable()
 export class IndexerService {
@@ -58,6 +58,7 @@ export class IndexerService {
     this.bootstrap().then(
       () => {
         this.eventsTrackingLoop()
+        // this.callSetWinner()
       }
     )
     this.logger.log(`App service started`)
@@ -117,12 +118,13 @@ export class IndexerService {
       await transactionalEntityManager.insert(TokenWinner, {
         token,
         timestamp,
+        competitionId,
         txnHash,
         blockNumber
       })
-      this.logger.log(`Added new token winner=${winnerAddress}, timestamp=${timestamp}`)
+      this.logger.log(`Added new token winner=${winnerAddress}, competitionId=${competitionId}, timestamp=${timestamp}`)
     } else {
-      this.logger.warn(`Token winner=${winnerAddress}, timestamp=${timestamp} already exists, skip`)
+      this.logger.warn(`Token winner=${winnerAddress}, competitionId=${competitionId}, timestamp=${timestamp} already exists, skip`)
     }
   }
 
@@ -387,40 +389,87 @@ export class IndexerService {
     this.eventsTrackingLoop()
   }
 
+  private sleep(timeout: number) {
+    return new Promise(resolve => setTimeout(resolve, timeout));
+  }
+
+  private async setWinnerByCompetitionId(prevCompetitionId: bigint) {
+    const gasFees = await this.tokenFactoryContract.methods
+      .setWinnerByCompetitionId(prevCompetitionId)
+      .estimateGas({
+        from: this.accountAddress
+      });
+
+    const gasPrice = await this.web3.eth.getGasPrice();
+
+    const tx = {
+      from: this.accountAddress,
+      to: this.configService.get('TOKEN_FACTORY_ADDRESS'),
+      gas: gasFees,
+      gasPrice,
+      data: this.tokenFactoryContract.methods
+        .setWinnerByCompetitionId(prevCompetitionId)
+        .encodeABI(),
+    };
+
+    const signPromise = await this.web3.eth.accounts.signTransaction(
+      tx,
+      this.configService.get('SERVICE_PRIVATE_KEY')
+    );
+
+    const sendTxn = await this.web3.eth.sendSignedTransaction(signPromise.rawTransaction,);
+
+    return sendTxn.transactionHash.toString()
+  }
+
+  private async startNewCompetition() {
+    const gasFees = await this.tokenFactoryContract.methods
+      .startNewCompetition()
+      .estimateGas({ from: this.accountAddress });
+
+    const gasPrice = await this.web3.eth.getGasPrice();
+
+    const tx = {
+      from: this.accountAddress,
+      to: this.configService.get('TOKEN_FACTORY_ADDRESS'),
+      gas: gasFees,
+      gasPrice,
+      data: this.tokenFactoryContract.methods.startNewCompetition().encodeABI(),
+    };
+
+    const signPromise = await this.web3.eth.accounts.signTransaction(tx, this.configService.get('SERVICE_PRIVATE_KEY'));
+
+    const sendTxn = await this.web3.eth.sendSignedTransaction(
+      signPromise.rawTransaction,
+    );
+
+    return sendTxn.transactionHash.toString()
+  }
+
+  private async getCompetitionId () {
+    return await this.tokenFactoryContract.methods
+      .currentCompetitionId()
+      .call() as bigint
+  }
+
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async callSetWinner() {
-    let txnHash = ''
-    let gasFees = 0n
-
     for(let i = 0; i < 3; i++) {
       try {
-        gasFees = await this.tokenFactoryContract.methods
-          .setWinner()
-          .estimateGas({ from: this.accountAddress });
-        const gasPrice = await this.web3.eth.getGasPrice();
-        const tx = {
-          from: this.accountAddress,
-          to: this.configService.get('TOKEN_FACTORY_ADDRESS'),
-          gas: gasFees,
-          gasPrice,
-          data: this.tokenFactoryContract.methods.setWinner().encodeABI(),
-        };
-        const signPromise = await this.web3.eth.accounts.signTransaction(tx, this.configService.get('SERVICE_PRIVATE_KEY'));
-        const sendTxn =
-          await this.web3.eth.sendSignedTransaction(
-            signPromise.rawTransaction,
-          );
-        txnHash = sendTxn.transactionHash.toString()
+        const currentCompetitionId = await this.getCompetitionId()
+        this.logger.log(`Current competition id=${currentCompetitionId}`)
+
+        await this.startNewCompetition()
+        await this.sleep(4000)
+        const newCompetitionId = await this.getCompetitionId()
+        this.logger.log(`Started new competition id=${newCompetitionId}`)
+        const setWinnerHash = await this.setWinnerByCompetitionId(currentCompetitionId)
+        this.logger.log(`New setWinner is called, txnHash=${setWinnerHash}`)
         break;
       } catch (e) {
         this.logger.warn(`Failed to send setWinner transaction, attempt: ${(i + 1)} / 3:`, e)
+        await new Promise(resolve => setTimeout(resolve, 5 * 1000));
       }
-    }
-
-    if(txnHash) {
-      this.logger.log(`[setWinner] successfully called, transaction hash=${txnHash}, gasFees=${gasFees}`)
-    } else {
-      this.logger.error('Failed to call setWinner!')
     }
   }
 }
