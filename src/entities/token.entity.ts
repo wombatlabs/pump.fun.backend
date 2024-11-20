@@ -59,6 +59,10 @@ export class Token {
 
   @ApiProperty()
   @Column({ type: 'integer' })
+  competitionId: number;
+
+  @ApiProperty()
+  @Column({ type: 'integer' })
   timestamp: number;
 
   @ManyToOne(() => UserAccount, (user) => user.tokens, {

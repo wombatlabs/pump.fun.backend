@@ -158,6 +158,12 @@
       {
         "indexed": false,
         "internalType": "uint256",
+        "name": "competitionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
         "name": "timestamp",
         "type": "uint256"
       }
@@ -234,6 +240,12 @@
         "internalType": "address",
         "name": "creator",
         "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "competitionId",
+        "type": "uint256"
       },
       {
         "indexed": false,
@@ -371,7 +383,7 @@
     "name": "bondingCurve",
     "outputs": [
       {
-        "internalType": "contract BondingCurve",
+        "internalType": "contract BancorBondingCurve",
         "name": "",
         "type": "address"
       }
@@ -444,7 +456,26 @@
         "type": "address"
       }
     ],
-    "name": "collateralByDay",
+    "name": "collateralById",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "competitionIds",
     "outputs": [
       {
         "internalType": "uint256",
@@ -485,14 +516,8 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "creationDate",
+    "inputs": [],
+    "name": "currentCompetitionId",
     "outputs": [
       {
         "internalType": "uint256",
@@ -533,29 +558,16 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "day",
+        "name": "competitionId",
         "type": "uint256"
       }
     ],
-    "name": "getWinnerByDay",
+    "name": "getWinnerByCompetitionId",
     "outputs": [
       {
         "internalType": "address",
         "name": "",
         "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "maxFundingRateInterval",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -629,33 +641,20 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "interval",
+        "name": "competitionId",
         "type": "uint256"
       }
     ],
-    "name": "setMaxFundingRateInterval",
+    "name": "setWinnerByCompetitionId",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
   },
   {
     "inputs": [],
-    "name": "setWinner",
+    "name": "startNewCompetition",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "startOfCurrentDay",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -685,6 +684,49 @@
         "internalType": "enum TokenFactory.TokenState",
         "name": "",
         "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "tokensByCompetitionId",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "totalTokensByCompetitionId",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -732,17 +774,17 @@
   {
     "inputs": [
       {
-        "internalType": "address",
+        "internalType": "uint256",
         "name": "",
-        "type": "address"
+        "type": "uint256"
       }
     ],
     "name": "winners",
     "outputs": [
       {
-        "internalType": "uint256",
+        "internalType": "address",
         "name": "",
-        "type": "uint256"
+        "type": "address"
       }
     ],
     "stateMutability": "view",

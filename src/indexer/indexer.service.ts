@@ -90,6 +90,7 @@ export class IndexerService {
     const blockNumber = Number(event.blockNumber)
     const values = event.returnValues
     const winnerAddress = (values['winner'] as string).toLowerCase()
+    const competitionId = String(values['competitionId'] as bigint)
     const timestamp = String(values['timestamp'] as bigint)
 
     if(winnerAddress === ZeroAddress) {
@@ -100,8 +101,9 @@ export class IndexerService {
     const existedWinner = await transactionalEntityManager.findOne(TokenWinner, {
       where: {
         token: {
-          address: winnerAddress
+          address: winnerAddress,
         },
+        competitionId,
         timestamp
       }
     })
@@ -109,7 +111,7 @@ export class IndexerService {
     if(!existedWinner) {
       const token = await this.appService.getTokenByAddress(winnerAddress, transactionalEntityManager)
       if(!token) {
-        this.logger.error(`Winner token entry not found in database, winnerAddress=${winnerAddress} , exit`)
+        this.logger.error(`Failed to add winner: winner token not found in database, winnerAddress=${winnerAddress}, exit`)
         process.exit(1)
       }
       await transactionalEntityManager.insert(TokenWinner, {
@@ -132,6 +134,7 @@ export class IndexerService {
     const symbol = values['symbol'] as string
     const uri = values['uri'] as string
     const creatorAddress = (values['creator'] as string).toLowerCase()
+    const competitionId = Number(values['competitionId'] as bigint)
     const timestamp = Number(values['timestamp'] as bigint)
 
     let uriData = null
@@ -159,12 +162,13 @@ export class IndexerService {
       blockNumber: Number(event.blockNumber),
       name,
       symbol,
+      competitionId,
       timestamp,
       user,
       uri,
       uriData,
     });
-    this.logger.log(`Create token: address=${tokenAddress}, name=${name}, symbol=${symbol}, uri=${uri}, creator=${creatorAddress}, txnHash=${txnHash}`);
+    this.logger.log(`Create token: address=${tokenAddress}, name=${name}, symbol=${symbol}, uri=${uri}, creator=${creatorAddress}, competitionId=${competitionId}, txnHash=${txnHash}`);
   }
 
   private async processTradeEvent(type: TradeType, event: EventLog, transactionalEntityManager: EntityManager) {
@@ -296,14 +300,14 @@ export class IndexerService {
 
       if(toBlock - fromBlock >= 1) {
         const setWinnerEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
-          fromBlock, toBlock, topics: [ this.web3.utils.sha3('SetWinner(address,uint256)')],
+          fromBlock, toBlock, topics: [ this.web3.utils.sha3('SetWinner(address,uint256,uint256)')],
         }) as EventLog[];
 
         const tokenCreatedEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
           fromBlock,
           toBlock,
           topics: [
-            this.web3.utils.sha3('TokenCreated(address,string,string,string,address,uint256)'),
+            this.web3.utils.sha3('TokenCreated(address,string,string,string,address,uint256,uint256)'),
           ],
         }) as EventLog[];
 

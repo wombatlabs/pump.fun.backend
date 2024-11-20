@@ -21,6 +21,10 @@ export class TokenWinner {
 
   @ApiProperty()
   @Column({ type: 'decimal', default: 0 })
+  competitionId: string;
+
+  @ApiProperty()
+  @Column({ type: 'decimal', default: 0 })
   timestamp: string;
 
   @ApiProperty()
