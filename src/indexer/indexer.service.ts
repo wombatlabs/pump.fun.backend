@@ -512,7 +512,9 @@ export class IndexerService {
       .call() as bigint
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, {
+    timeZone: 'America/Los_Angeles'
+  })
   async callSetWinner() {
     for(let i = 0; i < 3; i++) {
       try {
