@@ -58,7 +58,6 @@ export class IndexerService {
     this.bootstrap().then(
       () => {
         this.eventsTrackingLoop()
-        // this.callSetWinner()
       }
     )
     this.logger.log(`App service started`)
@@ -458,7 +457,6 @@ export class IndexerService {
       try {
         const currentCompetitionId = await this.getCompetitionId()
         this.logger.log(`Current competition id=${currentCompetitionId}`)
-
         await this.startNewCompetition()
         await this.sleep(4000)
         const newCompetitionId = await this.getCompetitionId()
@@ -468,7 +466,7 @@ export class IndexerService {
         break;
       } catch (e) {
         this.logger.warn(`Failed to send setWinner transaction, attempt: ${(i + 1)} / 3:`, e)
-        await new Promise(resolve => setTimeout(resolve, 5 * 1000));
+        await this.sleep(4000)
       }
     }
   }
