@@ -3,7 +3,7 @@ import {Contract, ContractAbi, EventLog, Web3} from "web3";
 import {TokenMetadata, TradeType} from "../types";
 import axios from "axios";
 import process from "process";
-import {IndexerState, Token, TokenBalance, TokenWinner, Trade} from "../entities";
+import {IndexerState, Token, TokenBalance, TokenBurn, TokenWinner, Trade} from "../entities";
 import {ConfigService} from "@nestjs/config";
 import {UserService} from "../user/user.service";
 import {DataSource, EntityManager} from "typeorm";
@@ -114,6 +114,10 @@ export class IndexerService {
         this.logger.error(`Failed to add winner: winner token not found in database, winnerAddress=${winnerAddress}, exit`)
         process.exit(1)
       }
+
+      token.isWinner = true
+
+      await transactionalEntityManager.save(token)
       await transactionalEntityManager.insert(TokenWinner, {
         token,
         timestamp,
@@ -266,6 +270,50 @@ export class IndexerService {
     }
   }
 
+  private async processBurnTokenAndSetWinnerEvent(event: EventLog, transactionalEntityManager: EntityManager) {
+    const txnHash = event.transactionHash.toLowerCase()
+    const values = event.returnValues
+    const senderAddress = (values['sender'] as string).toLowerCase()
+    const tokenAddress = (values['token'] as string).toLowerCase()
+    const winnerTokenAddress = (values['winnerToken'] as string).toLowerCase()
+    const burnedAmount = values['burnedAmount'] as bigint
+    const receivedETH = values['receivedETH'] as bigint
+    const mintedAmount = values['mintedAmount'] as bigint
+    const timestamp = Number(values['timestamp'] as bigint)
+
+    let sender = await this.userService.getUserByAddress(senderAddress, transactionalEntityManager)
+    if(!sender) {
+      this.logger.warn(`Sender ${senderAddress} is missing, adding new user...`)
+      await this.userService.createUser({ address: senderAddress }, transactionalEntityManager)
+      sender = await this.userService.getUserByAddress(senderAddress, transactionalEntityManager)
+    }
+
+    const token = await this.appService.getTokenByAddress(tokenAddress, transactionalEntityManager)
+    if(!token) {
+      this.logger.error(`Token ${tokenAddress} not found in database, exit`)
+      process.exit(1)
+    }
+
+    const winnerToken = await this.appService.getTokenByAddress(winnerTokenAddress, transactionalEntityManager)
+    if(!winnerToken) {
+      this.logger.error(`Winner token ${winnerTokenAddress} not found in database, exit`)
+      process.exit(1)
+    }
+
+    await transactionalEntityManager.insert(TokenBurn, {
+      txnHash,
+      blockNumber: Number(event.blockNumber),
+      sender,
+      token,
+      winnerToken,
+      timestamp,
+      burnedAmount: String(burnedAmount),
+      receivedETH: String(receivedETH),
+      mintedAmount: String(mintedAmount),
+    });
+    this.logger.log(`BurnTokenAndMintWinner: senderAddress=${senderAddress}, tokenAddress=${tokenAddress}, winnerTokenAddress=${winnerTokenAddress}, burnedAmount=${burnedAmount}, receivedETH=${receivedETH}, mintedAmount=${mintedAmount}, txnHash=${txnHash}`);
+  }
+
   private async getLatestIndexedBlockNumber() {
     const indexerState = await this.dataSource.manager.findOne(IndexerState, {
       where: {},
@@ -328,12 +376,21 @@ export class IndexerService {
           ],
         }) as EventLog[];
 
+        const burnAndSetWinnerEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
+          fromBlock,
+          toBlock,
+          topics: [
+            this.web3.utils.sha3('BurnTokenAndMintWinner(address,address,address,uint256,uint256,uint256,uint256)'),
+          ],
+        }) as EventLog[];
+
         // concat and sort all events by block number and transaction index
         const protocolEvents: { data: EventLog; type: string }[] = tokenCreatedEvents
           .map(data => ({ type: 'create_token', data }))
           .concat(...buyEvents.map(data => ({ type: 'buy', data })))
           .concat(...sellEvents.map(data => ({ type: 'sell', data })))
           .concat(...setWinnerEvents.map(data => ({ type: 'set_winner', data })))
+          .concat(...burnAndSetWinnerEvents.map(data => ({ type: 'burn_token_and_set_winner', data })))
           .sort((a, b) => {
             const blockNumberDiff = Number(a.data.blockNumber) - Number(b.data.blockNumber)
             if(blockNumberDiff !== 0) {
@@ -360,6 +417,10 @@ export class IndexerService {
               }
               case 'set_winner': {
                 await this.processSetWinnerEvent(data, transactionalEntityManager)
+                break;
+              }
+              case 'burn_token_and_set_winner': {
+                await this.processBurnTokenAndSetWinnerEvent(data, transactionalEntityManager)
                 break;
               }
             }

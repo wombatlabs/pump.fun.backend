@@ -64,7 +64,7 @@ export class AppService {
                 balance: MoreThan('0')
             },
             order: {
-                createdAt: 'desc'
+                balance: 'desc'
             },
             take: limit,
             skip: offset

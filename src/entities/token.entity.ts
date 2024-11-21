@@ -87,6 +87,10 @@ export class Token {
   @Column({ type: 'double precision', default: 0, transformer: new ColumnNumericTransformer() })
   price: string;
 
+  @ApiProperty()
+  @Column('bool', { default: false })
+  isWinner: boolean;
+
   protected marketCap: String;
 
   @ApiProperty()
