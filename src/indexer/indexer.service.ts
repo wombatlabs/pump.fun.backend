@@ -446,7 +446,7 @@ export class IndexerService {
       process.exit(1)
     }
 
-    this.eventsTrackingLoop()
+    return this.eventsTrackingLoop()
   }
 
   private sleep(timeout: number) {
