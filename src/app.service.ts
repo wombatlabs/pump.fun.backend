@@ -1,8 +1,8 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {DataSource, EntityManager, MoreThan} from "typeorm";
-import {Comment, Token, TokenBalance, TokenWinner, Trade, UserAccount} from "./entities";
+import {Comment, Token, TokenBalance, TokenBurn, TokenWinner, Trade, UserAccount} from "./entities";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
-import {GetTokenBalancesDto, GetTokensDto, GetTokenWinnersDto} from "./dto/token.dto";
+import {GetTokenBalancesDto, GetTokenBurnsDto, GetTokensDto, GetTokenWinnersDto} from "./dto/token.dto";
 import {GetCandlesDto, GetTradesDto} from "./dto/trade.dto";
 import {UserService} from "./user/user.service";
 import {Candle} from "./types";
@@ -86,6 +86,24 @@ export class AppService {
             where: {
                 token: {
                     address: dto.tokenAddress
+                }
+            },
+            take: dto.limit,
+            skip: dto.offset,
+            order: {
+                timestamp: 'desc'
+            }
+        })
+    }
+
+    async getTokenBurns(dto: GetTokenBurnsDto){
+        return await this.dataSource.manager.find(TokenBurn, {
+            where: {
+                token: {
+                    address: dto.tokenAddress
+                },
+                sender: {
+                    address: dto.userAddress
                 }
             },
             take: dto.limit,

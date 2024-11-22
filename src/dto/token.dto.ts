@@ -62,3 +62,32 @@ export class GetTokenWinnersDto {
   @IsString()
   offset: number;
 }
+
+export class GetTokenBurnsDto {
+  @ApiProperty({ type: String, required: true })
+  @Transform((address) => address ? address.value.trim().toLowerCase() : address)
+  @Type(() => String)
+  @IsString()
+  tokenAddress: string;
+
+  @ApiProperty({ type: String, required: false })
+  @Transform((address) => address ? address.value.trim().toLowerCase() : address)
+  @Type(() => String)
+  @IsString()
+  @IsOptional()
+  userAddress?: string;
+
+  @ApiProperty({ type: Number, required: false, default: '100' })
+  // @Transform((limit) => limit.value.toNumber())
+  @Type(() => String)
+  @IsString()
+  @IsOptional()
+  limit: number;
+
+  @ApiProperty({ type: Number, required: false, default: '0' })
+  // @Transform((offset) => offset.value.toNumber())
+  @Type(() => String)
+  @IsString()
+  @IsOptional()
+  offset: number;
+}

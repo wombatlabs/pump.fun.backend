@@ -23,13 +23,13 @@ export class TokenBurn {
   @Column({ type: 'integer' })
   blockNumber: number;
 
-  @ManyToOne(() => UserAccount)
+  @ManyToOne(() => UserAccount, { eager: true })
   sender: UserAccount;
 
-  @ManyToOne(() => Token)
+  @ManyToOne(() => Token, { eager: true })
   token: Token;
 
-  @ManyToOne(() => Token)
+  @ManyToOne(() => Token, { eager: true })
   winnerToken: Token;
 
   @ApiProperty()
