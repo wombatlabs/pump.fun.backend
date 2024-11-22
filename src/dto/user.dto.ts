@@ -25,7 +25,7 @@ export class GetUsersDto {
 }
 
 const UsernameMaxLength = 20
-const UsernameMinLength = 5
+const UsernameMinLength = 4
 
 export class UpdateUserDto {
   @ApiProperty({ type: String, required: true, default: '' })
