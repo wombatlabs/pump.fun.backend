@@ -3,7 +3,16 @@ import {Contract, ContractAbi, EventLog, Web3} from "web3";
 import {TokenMetadata, TradeType} from "../types";
 import axios from "axios";
 import process from "process";
-import {IndexerState, Token, TokenBalance, TokenBurn, TokenWinner, Trade} from "../entities";
+import {
+  CompetitionEntity,
+  IndexerState,
+  LiquidityProvision,
+  Token,
+  TokenBalance,
+  TokenBurn,
+  TokenWinner,
+  Trade
+} from "../entities";
 import {ConfigService} from "@nestjs/config";
 import {UserService} from "../user/user.service";
 import {DataSource, EntityManager} from "typeorm";
@@ -314,6 +323,62 @@ export class IndexerService {
     this.logger.log(`BurnTokenAndMintWinner: senderAddress=${senderAddress}, tokenAddress=${tokenAddress}, winnerTokenAddress=${winnerTokenAddress}, burnedAmount=${burnedAmount}, receivedETH=${receivedETH}, mintedAmount=${mintedAmount}, txnHash=${txnHash}`);
   }
 
+  private async processLiquidityProvisionEvent(event: EventLog, transactionalEntityManager: EntityManager) {
+    const txnHash = event.transactionHash.toLowerCase()
+    const values = event.returnValues
+    const tokenAddress = (values['tokenAddress'] as string).toLowerCase()
+    const tokenCreatorAddress = (values['tokenCreator'] as string).toLowerCase()
+    const pool = (values['pool'] as string).toLowerCase()
+    const sender = (values['sender'] as string).toLowerCase()
+    const tokenId = String(values['tokenId'] as bigint)
+    const liquidity = String(values['liquidity'] as bigint)
+    const amount0 = String(values['amount0'] as bigint)
+    const amount1 = String(values['amount1'] as bigint)
+    const timestamp = Number(values['timestamp'] as bigint)
+
+    const token = await this.appService.getTokenByAddress(tokenAddress, transactionalEntityManager)
+    if(!token) {
+      this.logger.error(`LiquidityProvision txn hash=${txnHash}: token ${tokenAddress} not found in database, exit`)
+      process.exit(1)
+    }
+
+    let tokenCreator = await this.userService.getUserByAddress(tokenCreatorAddress, transactionalEntityManager)
+    if(!tokenCreator) {
+      this.logger.warn(`Token creator ${tokenCreatorAddress} is missing, adding new user...`)
+      await this.userService.createUser({ address: tokenCreatorAddress }, transactionalEntityManager)
+      tokenCreator = await this.userService.getUserByAddress(tokenCreatorAddress, transactionalEntityManager)
+    }
+
+    await transactionalEntityManager.insert(LiquidityProvision, {
+      txnHash,
+      blockNumber: Number(event.blockNumber),
+      token,
+      tokenCreator,
+      pool,
+      sender,
+      tokenId,
+      liquidity,
+      amount0,
+      amount1,
+      timestamp,
+    });
+    this.logger.log(`WinnerLiquidityAdded: tokenAddress=${tokenAddress}, tokenCreator=${tokenCreatorAddress}, pool=${pool}, liquidity=${liquidity}, amount0=${amount0}, timestamp=${timestamp}, amount1=${amount1}, txnHash=${txnHash}`);
+  }
+
+  private async processNewCompetitionEvent(event: EventLog, transactionalEntityManager: EntityManager) {
+    const txnHash = event.transactionHash.toLowerCase()
+    const values = event.returnValues
+    const competitionId = Number(values['competitionId'] as bigint)
+    const timestamp = Number(values['timestamp'] as bigint)
+    await transactionalEntityManager.insert(CompetitionEntity, {
+      txnHash,
+      blockNumber: Number(event.blockNumber),
+      competitionId,
+      timestamp,
+    });
+    this.logger.log(`NewCompetitionStarted: competitionId=${competitionId}, timestamp=${timestamp}, txnHash=${txnHash}`);
+  }
+
   private async getLatestIndexedBlockNumber() {
     const indexerState = await this.dataSource.manager.findOne(IndexerState, {
       where: {},
@@ -350,6 +415,14 @@ export class IndexerService {
       if(toBlock - fromBlock >= 1) {
         const setWinnerEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
           fromBlock, toBlock, topics: [ this.web3.utils.sha3('SetWinner(address,uint256,uint256)')],
+        }) as EventLog[];
+
+        const liquidityProvisionEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
+          fromBlock, toBlock, topics: [ this.web3.utils.sha3('WinnerLiquidityAdded(address,address,address,address,uint256,uint128,uint256,uint256,uint256)')],
+        }) as EventLog[];
+
+        const newCompetitionEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
+          fromBlock, toBlock, topics: [ this.web3.utils.sha3('NewCompetitionStarted(uint256,uint256)')],
         }) as EventLog[];
 
         const tokenCreatedEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
@@ -391,6 +464,8 @@ export class IndexerService {
           .concat(...sellEvents.map(data => ({ type: 'sell', data })))
           .concat(...setWinnerEvents.map(data => ({ type: 'set_winner', data })))
           .concat(...burnAndSetWinnerEvents.map(data => ({ type: 'burn_token_and_set_winner', data })))
+          .concat(...liquidityProvisionEvents.map(data => ({ type: 'liquidity_provision', data })))
+          .concat(...newCompetitionEvents.map(data => ({ type: 'new_competition', data })))
           .sort((a, b) => {
             const blockNumberDiff = Number(a.data.blockNumber) - Number(b.data.blockNumber)
             if(blockNumberDiff !== 0) {
@@ -423,11 +498,19 @@ export class IndexerService {
                 await this.processBurnTokenAndSetWinnerEvent(data, transactionalEntityManager)
                 break;
               }
+              case 'liquidity_provision': {
+                await this.processLiquidityProvisionEvent(data, transactionalEntityManager)
+                break;
+              }
+              case 'new_competition': {
+                await this.processNewCompetitionEvent(data, transactionalEntityManager)
+                break;
+              }
             }
           }
         })
 
-        this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens=${tokenCreatedEvents.length}, trade=${[...buyEvents, ...sellEvents].length} (buy=${buyEvents.length}, sell=${sellEvents.length}), setWinner=${setWinnerEvents.length}`)
+        this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens=${tokenCreatedEvents.length}, trade=${[...buyEvents, ...sellEvents].length} (buy=${buyEvents.length}, sell=${sellEvents.length}), SetWinner=${setWinnerEvents.length}, WinnerLiquidityAdded=${liquidityProvisionEvents.length}, NewCompetitionStarted=${newCompetitionEvents.length}`)
       } else {
         // Wait for blockchain
         toBlock = fromBlockParam - 1
