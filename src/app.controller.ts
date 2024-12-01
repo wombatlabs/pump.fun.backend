@@ -17,7 +17,6 @@ import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {AppService} from "./app.service";
 import {GetTokenBalancesDto, GetTokenBurnsDto, GetTokensDto, GetTokenWinnersDto} from "./dto/token.dto";
 import {GetCandlesDto, GetTradesDto} from "./dto/trade.dto";
-import {AddUserDto} from "./dto/user.dto";
 import {UserService} from "./user/user.service";
 import {FileInterceptor} from "@nestjs/platform-express";
 import {GcloudService} from "./gcloud/gcloud.service";
@@ -26,6 +25,7 @@ import {AddTokenMetadataDto} from "./dto/metadata.dto";
 import {AuthGuard} from "./common/auth.guard";
 import {plainToInstance} from "class-transformer";
 import {JwtUserAccount} from "./entities/user-account.entity";
+import {GetWinnerLiquidityProvisionsDto} from "./dto/winner.liquidity.dto";
 
 @SkipThrottle()
 @ApiTags('app')
@@ -100,6 +100,11 @@ export class AppController {
   @Get('/tokenBurns')
   getTokenBurns(@Query() dto: GetTokenBurnsDto) {
     return this.appService.getTokenBurns(dto)
+  }
+
+  @Get('/winnerLiquidityProvisions')
+  getWinnerLiquidityProvisions(@Query() dto: GetWinnerLiquidityProvisionsDto) {
+    return this.appService.getWinnerLiquidityProvisions(dto)
   }
 
   @Post('/uploadImage')

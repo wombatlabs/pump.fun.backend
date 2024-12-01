@@ -323,7 +323,7 @@ export class IndexerService {
     this.logger.log(`BurnTokenAndMintWinner: senderAddress=${senderAddress}, tokenAddress=${tokenAddress}, winnerTokenAddress=${winnerTokenAddress}, burnedAmount=${burnedAmount}, receivedETH=${receivedETH}, mintedAmount=${mintedAmount}, txnHash=${txnHash}`);
   }
 
-  private async processLiquidityProvisionEvent(event: EventLog, transactionalEntityManager: EntityManager) {
+  private async processWinnerLiquidityEvent(event: EventLog, transactionalEntityManager: EntityManager) {
     const txnHash = event.transactionHash.toLowerCase()
     const values = event.returnValues
     const tokenAddress = (values['tokenAddress'] as string).toLowerCase()
@@ -417,7 +417,7 @@ export class IndexerService {
           fromBlock, toBlock, topics: [ this.web3.utils.sha3('SetWinner(address,uint256,uint256)')],
         }) as EventLog[];
 
-        const liquidityProvisionEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
+        const winnerLiquidityEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
           fromBlock, toBlock, topics: [ this.web3.utils.sha3('WinnerLiquidityAdded(address,address,address,address,uint256,uint128,uint256,uint256,uint256)')],
         }) as EventLog[];
 
@@ -464,7 +464,7 @@ export class IndexerService {
           .concat(...sellEvents.map(data => ({ type: 'sell', data })))
           .concat(...setWinnerEvents.map(data => ({ type: 'set_winner', data })))
           .concat(...burnAndSetWinnerEvents.map(data => ({ type: 'burn_token_and_set_winner', data })))
-          .concat(...liquidityProvisionEvents.map(data => ({ type: 'liquidity_provision', data })))
+          .concat(...winnerLiquidityEvents.map(data => ({ type: 'winner_liquidity', data })))
           .concat(...newCompetitionEvents.map(data => ({ type: 'new_competition', data })))
           .sort((a, b) => {
             const blockNumberDiff = Number(a.data.blockNumber) - Number(b.data.blockNumber)
@@ -498,8 +498,8 @@ export class IndexerService {
                 await this.processBurnTokenAndSetWinnerEvent(data, transactionalEntityManager)
                 break;
               }
-              case 'liquidity_provision': {
-                await this.processLiquidityProvisionEvent(data, transactionalEntityManager)
+              case 'winner_liquidity': {
+                await this.processWinnerLiquidityEvent(data, transactionalEntityManager)
                 break;
               }
               case 'new_competition': {
@@ -510,7 +510,7 @@ export class IndexerService {
           }
         })
 
-        this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens=${tokenCreatedEvents.length}, trade=${[...buyEvents, ...sellEvents].length} (buy=${buyEvents.length}, sell=${sellEvents.length}), SetWinner=${setWinnerEvents.length}, WinnerLiquidityAdded=${liquidityProvisionEvents.length}, NewCompetitionStarted=${newCompetitionEvents.length}`)
+        this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens=${tokenCreatedEvents.length}, trade=${[...buyEvents, ...sellEvents].length} (buy=${buyEvents.length}, sell=${sellEvents.length}), SetWinner=${setWinnerEvents.length}, WinnerLiquidityAdded=${winnerLiquidityEvents.length}, NewCompetitionStarted=${newCompetitionEvents.length}`)
       } else {
         // Wait for blockchain
         toBlock = fromBlockParam - 1
