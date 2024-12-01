@@ -20,7 +20,7 @@ export class CompetitionEntity {
   blockNumber: number;
 
   @ApiProperty()
-  @Column({ type: 'bigint' })
+  @Column({ type: 'integer' })
   competitionId: number;
 
   @ApiProperty()

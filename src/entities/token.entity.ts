@@ -62,7 +62,7 @@ export class Token {
   competitionId: number;
 
   @ApiProperty()
-  @Column({ type: 'integer' })
+  @Column({ type: 'bigint' })
   timestamp: number;
 
   @ManyToOne(() => UserAccount, (user) => user.tokens, {

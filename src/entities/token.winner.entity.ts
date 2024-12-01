@@ -20,12 +20,12 @@ export class TokenWinner {
   token: Token
 
   @ApiProperty()
-  @Column({ type: 'decimal', default: 0 })
-  competitionId: string;
+  @Column({ type: 'integer' })
+  competitionId: number;
 
   @ApiProperty()
-  @Column({ type: 'decimal', default: 0 })
-  timestamp: string;
+  @Column({ type: 'bigint' })
+  timestamp: number;
 
   @ApiProperty()
   @Column()

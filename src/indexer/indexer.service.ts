@@ -99,8 +99,8 @@ export class IndexerService {
     const blockNumber = Number(event.blockNumber)
     const values = event.returnValues
     const winnerAddress = (values['winner'] as string).toLowerCase()
-    const competitionId = String(values['competitionId'] as bigint)
-    const timestamp = String(values['timestamp'] as bigint)
+    const competitionId = Number(values['competitionId'] as bigint)
+    const timestamp = Number(values['timestamp'] as bigint)
 
     if(winnerAddress === ZeroAddress) {
       this.logger.warn(`winnerAddress=${winnerAddress}, txnHash=${txnHash}, skip`)
