@@ -32,7 +32,7 @@ export class AppService {
     }
 
     async getTokens(dto: GetTokensDto){
-        const { search, offset, limit } = dto
+        const { search, offset, limit, isWinner } = dto
         const query = this.dataSource.getRepository(Token)
           .createQueryBuilder('token')
           .leftJoinAndSelect('token.user', 'user')
@@ -48,6 +48,10 @@ export class AppService {
               .orWhere('LOWER(token.address) = LOWER(:address)', { address: search })
               .orWhere('LOWER(token.symbol) LIKE LOWER(:symbol)', { symbol: `%${search}%` })
               .orWhere('LOWER(token.txnHash) = LOWER(:txnHash)', { txnHash: search })
+        }
+
+        if(typeof isWinner !== 'undefined') {
+            query.andWhere({ isWinner })
         }
 
         return await query.getMany()

@@ -8,6 +8,9 @@ export class GetTokensDto {
   // @IsString()
   search?: string;
 
+  @ApiProperty({ type: Boolean, required: false })
+  isWinner?: boolean;
+
   @ApiProperty({ type: Number, required: false, default: '100' })
   // @Transform((limit) => limit.value.toNumber())
   @Type(() => String)
