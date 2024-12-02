@@ -87,7 +87,8 @@ create database pump_fun_backend;
 
 \q
 
-// Set new env variables if needed: flyctl secrete set <secret_name> <secret_value>
+Set new env variables if needed:
+flyctl secrets set <secret_name> <secret_value>
 
 flyctl deploy --ha=false
 ```
