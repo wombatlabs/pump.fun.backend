@@ -11,6 +11,9 @@ export interface TokenMetadata {
   ticker: string
   description: string
   image: string
+  twitterLink: string
+  telegramLink: string
+  websiteLink: string
 }
 
 export interface Candle {
