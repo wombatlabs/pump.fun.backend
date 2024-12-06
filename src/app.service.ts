@@ -45,6 +45,7 @@ export class AppService {
         const query = this.dataSource.getRepository(Token)
           .createQueryBuilder('token')
           .leftJoinAndSelect('token.user', 'user')
+          .leftJoinAndSelect('token.competition', 'competition')
           .loadRelationCountAndMap('token.commentsCount', 'token.comments')
           .offset(offset)
           .limit(limit)
