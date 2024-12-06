@@ -14,13 +14,14 @@ import {UserAccount} from "./user-account.entity";
 import {TokenMetadata} from "../types";
 import {Trade} from "./trade.entity";
 import Decimal from "decimal.js";
+import {CompetitionEntity} from "./competition.entity";
 
 class ColumnNumericTransformer {
   to(data: string): string {
     return data;
   }
   from(data: number): string {
-    return new Decimal(data).toFixed()
+    return data ? new Decimal(data).toFixed() : '0'
   }
 }
 
@@ -57,9 +58,15 @@ export class Token {
   @Column({ type: 'json', nullable: true })
   uriData: TokenMetadata | null;
 
-  @ApiProperty()
-  @Column({ type: 'integer' })
-  competitionId: number;
+  // @ApiProperty()
+  // @Column({ type: 'integer' })
+  // competitionId: number;
+
+  @ManyToOne(() => CompetitionEntity, {
+    eager: true
+  })
+  @JoinTable()
+  competition: CompetitionEntity
 
   @ApiProperty()
   @Column({ type: 'bigint' })

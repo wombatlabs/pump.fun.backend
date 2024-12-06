@@ -1,6 +1,15 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {DataSource, EntityManager, MoreThan} from "typeorm";
-import {Comment, LiquidityProvision, Token, TokenBalance, TokenBurn, TokenWinner, Trade, UserAccount} from "./entities";
+import {
+    Comment,
+    CompetitionEntity,
+    LiquidityProvision,
+    Token,
+    TokenBalance,
+    TokenBurn,
+    Trade,
+    UserAccount
+} from "./entities";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {GetTokenBalancesDto, GetTokenBurnsDto, GetTokensDto, GetTokenWinnersDto} from "./dto/token.dto";
 import {GetCandlesDto, GetTradesDto} from "./dto/trade.dto";
@@ -77,16 +86,6 @@ export class AppService {
         })
     }
 
-    async getTokenWinners(dto: GetTokenWinnersDto) {
-        return await this.dataSource.manager.find(TokenWinner, {
-            order: {
-                timestamp: 'desc'
-            },
-            take: dto.limit,
-            skip: dto.offset,
-        })
-    }
-
     async getTrades(dto: GetTradesDto){
         return await this.dataSource.manager.find(Trade, {
             where: {
@@ -98,6 +97,16 @@ export class AppService {
             skip: dto.offset,
             order: {
                 timestamp: 'desc'
+            }
+        })
+    }
+
+    async getCompetitions() {
+        return await this.dataSource.manager.find(CompetitionEntity, {
+            relations: ['winnerToken'],
+            where: {},
+            order: {
+                competitionId: 'desc'
             }
         })
     }

@@ -2,9 +2,13 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  OneToOne,
   PrimaryGeneratedColumn,
+  JoinColumn
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
+import {Token} from "./token.entity";
+
 @Entity({ name: 'competitions' })
 export class CompetitionEntity {
   @ApiProperty()
@@ -24,8 +28,21 @@ export class CompetitionEntity {
   competitionId: number;
 
   @ApiProperty()
-  @Column({ type: 'bigint' })
-  timestamp: number;
+  @Column({ type: 'bigint', nullable: false })
+  timestampStart: number;
+
+  @ApiProperty()
+  @Column({ type: 'bigint', nullable: true })
+  timestampEnd: number;
+
+  @ApiProperty()
+  @Column('bool', { default: false })
+  isCompleted: boolean;
+
+  @ApiProperty()
+  @OneToOne((type) => Token, token => token.competition)
+  @JoinColumn()
+  winnerToken: Token | null
 
   @ApiProperty()
   @CreateDateColumn({ name: 'createdAt' })

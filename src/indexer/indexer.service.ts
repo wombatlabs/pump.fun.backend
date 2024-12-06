@@ -2,7 +2,7 @@ import {Injectable, Logger} from '@nestjs/common';
 import {Contract, ContractAbi, EventLog, Web3} from "web3";
 import {TokenMetadata, TradeType} from "../types";
 import axios from "axios";
-import process from "process";
+import * as process from "process";
 import {
   CompetitionEntity,
   IndexerState,
@@ -10,7 +10,6 @@ import {
   Token,
   TokenBalance,
   TokenBurn,
-  TokenWinner,
   Trade
 } from "../entities";
 import {ConfigService} from "@nestjs/config";
@@ -107,37 +106,27 @@ export class IndexerService {
       return
     }
 
-    const existedWinner = await transactionalEntityManager.findOne(TokenWinner, {
-      where: {
-        token: {
-          address: winnerAddress,
-        },
-        competitionId,
-        timestamp
-      }
-    })
-
-    if(!existedWinner) {
-      const token = await this.appService.getTokenByAddress(winnerAddress, transactionalEntityManager)
-      if(!token) {
-        this.logger.error(`Failed to add winner: winner token not found in database, winnerAddress=${winnerAddress}, exit`)
-        process.exit(1)
-      }
-
-      token.isWinner = true
-
-      await transactionalEntityManager.save(token)
-      await transactionalEntityManager.insert(TokenWinner, {
-        token,
-        timestamp,
-        competitionId,
-        txnHash,
-        blockNumber
-      })
-      this.logger.log(`Added new token winner=${winnerAddress}, competitionId=${competitionId}, timestamp=${timestamp}`)
-    } else {
-      this.logger.warn(`Token winner=${winnerAddress}, competitionId=${competitionId}, timestamp=${timestamp} already exists, skip`)
+    const token = await this.appService.getTokenByAddress(winnerAddress, transactionalEntityManager)
+    if(!token) {
+      this.logger.error(`Failed to add winner: winner token not found in database, winnerAddress=${winnerAddress}, exit`)
+      process.exit(1)
     }
+
+    const competition = await transactionalEntityManager.findOne(CompetitionEntity, {
+      where: { competitionId }
+    })
+    if(!competition) {
+      this.logger.error(`Failed to add winner: competition=${competitionId} not found in database, exit`)
+      process.exit(1)
+    }
+
+    token.isWinner = true
+    await transactionalEntityManager.save(token)
+
+    competition.winnerToken = token
+    await transactionalEntityManager.save(competition)
+
+    this.logger.log(`Added new token winner=${winnerAddress}, competitionId=${competitionId}, timestamp=${timestamp}`)
   }
 
   private async processCreateTokenEvent(event: EventLog, transactionalEntityManager: EntityManager) {
@@ -170,17 +159,32 @@ export class IndexerService {
       }
     }
 
+    const competition = await transactionalEntityManager.findOne(CompetitionEntity, {
+      where: {},
+      order: {
+        competitionId: 'DESC'
+      }
+    })
+    if(!competition) {
+      this.logger.error(`Create token: current competition is missing in DB; exit`)
+      process.exit(1)
+    }
+    if(competition.isCompleted) {
+      this.logger.error(`Create token: current competition is completed, new competitions has not started yet; exit`)
+      process.exit(1)
+    }
+
     await transactionalEntityManager.insert(Token, {
       txnHash,
       address: tokenAddress,
       blockNumber: Number(event.blockNumber),
       name,
       symbol,
-      competitionId,
       timestamp,
       user,
       uri,
       uriData,
+      competition
     });
     this.logger.log(`Create token: address=${tokenAddress}, name=${name}, symbol=${symbol}, uri=${uri}, creator=${creatorAddress}, competitionId=${competitionId}, txnHash=${txnHash}`);
   }
@@ -370,11 +374,26 @@ export class IndexerService {
     const values = event.returnValues
     const competitionId = Number(values['competitionId'] as bigint)
     const timestamp = Number(values['timestamp'] as bigint)
+
+    const competitions = await this.appService.getCompetitions()
+    if(competitions.length > 0) {
+      const currentCompetition = competitions[0]
+      if(currentCompetition) {
+        currentCompetition.isCompleted = true
+        currentCompetition.timestampEnd = timestamp
+        await transactionalEntityManager.save(currentCompetition)
+      }
+
+    }
+
     await transactionalEntityManager.insert(CompetitionEntity, {
       txnHash,
       blockNumber: Number(event.blockNumber),
       competitionId,
-      timestamp,
+      timestampStart: timestamp,
+      timestampEnd: null,
+      isCompleted: false,
+      winnerToken: null,
     });
     this.logger.log(`NewCompetitionStarted: competitionId=${competitionId}, timestamp=${timestamp}, txnHash=${txnHash}`);
   }
@@ -413,16 +432,16 @@ export class IndexerService {
       }
 
       if(toBlock - fromBlock >= 1) {
+        const newCompetitionEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
+          fromBlock, toBlock, topics: [ this.web3.utils.sha3('NewCompetitionStarted(uint256,uint256)')],
+        }) as EventLog[];
+
         const setWinnerEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
           fromBlock, toBlock, topics: [ this.web3.utils.sha3('SetWinner(address,uint256,uint256)')],
         }) as EventLog[];
 
         const winnerLiquidityEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
           fromBlock, toBlock, topics: [ this.web3.utils.sha3('WinnerLiquidityAdded(address,address,address,address,uint256,uint128,uint256,uint256,uint256)')],
-        }) as EventLog[];
-
-        const newCompetitionEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
-          fromBlock, toBlock, topics: [ this.web3.utils.sha3('NewCompetitionStarted(uint256,uint256)')],
         }) as EventLog[];
 
         const tokenCreatedEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
