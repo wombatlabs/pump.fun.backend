@@ -150,7 +150,7 @@ export class IndexerService {
 
     let user = await this.userService.getUserByAddress(creatorAddress, transactionalEntityManager)
     if(!user) {
-      this.logger.warn(`Creator address=${creatorAddress} is missing,, adding new user...`)
+      this.logger.warn(`Creator address=${creatorAddress} is missing, adding new user...`)
       await this.userService.createUser({ address: creatorAddress }, transactionalEntityManager)
       user = await this.userService.getUserByAddress(creatorAddress, transactionalEntityManager)
       if(!user) {
@@ -232,7 +232,7 @@ export class IndexerService {
         holder.balance = String(BigInt(holder.balance) + amountOut)
         await tokenHoldersRepository.save(holder)
 
-        price = (new Decimal(amountIn.toString()).div(10).div(new Decimal(amountOut.toString()))).toFixed(10)
+        price = (new Decimal(amountIn.toString()).div(new Decimal(amountOut.toString()))).toFixed(10)
         token.totalSupply = String(BigInt(token.totalSupply) + amountOut)
         token.price = price
         await tokenRepository.save(token)
@@ -252,7 +252,7 @@ export class IndexerService {
         holder.balance = String(BigInt(holder.balance) - amountIn)
         await tokenHoldersRepository.save(holder)
 
-        price = (new Decimal(amountOut.toString()).div(10).div(new Decimal(amountIn.toString()))).toFixed(10)
+        price = (new Decimal(amountOut.toString()).div(new Decimal(amountIn.toString()))).toFixed(10)
         token.totalSupply = String(BigInt(token.totalSupply) - amountIn)
         token.price = price
         await tokenRepository.save(token)
