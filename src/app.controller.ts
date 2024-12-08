@@ -5,7 +5,6 @@ import {
   Get,
   Logger,
   NotFoundException,
-  Param,
   Post,
   Query, UploadedFile, UseInterceptors,
   Headers, UseGuards, Request, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator
@@ -26,6 +25,7 @@ import {AuthGuard} from "./common/auth.guard";
 import {plainToInstance} from "class-transformer";
 import {JwtUserAccount} from "./entities/user-account.entity";
 import {GetWinnerLiquidityProvisionsDto} from "./dto/winner.liquidity.dto";
+import {CacheTTL} from "@nestjs/common/cache";
 
 @SkipThrottle()
 @ApiTags('app')
@@ -48,21 +48,25 @@ export class AppController {
     return 'OK';
   }
 
+  @CacheTTL(200)
   @Get('/tokens')
   getTokens(@Query() dto: GetTokensDto) {
     return this.appService.getTokens(dto)
   }
 
+  @CacheTTL(200)
   @Get('/balances')
   getTokenHolders(@Query() dto: GetTokenBalancesDto) {
     return this.appService.getTokenBalances(dto)
   }
 
+  @CacheTTL(200)
   @Get('/candles')
   async getCandles(@Query() dto: GetCandlesDto) {
     return await this.appService.getCandles(dto)
   }
 
+  @CacheTTL(200)
   @Get('/comments')
   getComments(@Query() dto: GetCommentsDto) {
     return this.appService.getComments(dto)
@@ -87,21 +91,25 @@ export class AppController {
     return await this.appService.addComment(address, dto)
   }
 
+  @CacheTTL(200)
   @Get('/trades')
   getTrades(@Query() dto: GetTradesDto) {
     return this.appService.getTrades(dto)
   }
 
+  @CacheTTL(200)
   @Get('/competitions')
   getCompetitions() {
     return this.appService.getCompetitions()
   }
 
+  @CacheTTL(200)
   @Get('/tokenBurns')
   getTokenBurns(@Query() dto: GetTokenBurnsDto) {
     return this.appService.getTokenBurns(dto)
   }
 
+  @CacheTTL(200)
   @Get('/winnerLiquidityProvisions')
   getWinnerLiquidityProvisions(@Query() dto: GetWinnerLiquidityProvisionsDto) {
     return this.appService.getWinnerLiquidityProvisions(dto)

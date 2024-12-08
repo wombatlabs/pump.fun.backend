@@ -7,7 +7,7 @@ import { AppService } from './app.service';
 import configuration from './config';
 import { typeormConfig } from './config/typeorm';
 import {ThrottlerGuard, ThrottlerModule} from "@nestjs/throttler";
-import {APP_GUARD} from "@nestjs/core";
+import {APP_GUARD, APP_INTERCEPTOR} from "@nestjs/core";
 import {ScheduleModule} from "@nestjs/schedule";
 import { UserService } from './user/user.service';
 import { GcloudService } from './gcloud/gcloud.service';
@@ -15,9 +15,13 @@ import { IndexerService } from './indexer/indexer.service';
 import { UserController } from './user/user.controller';
 import {JwtModule} from "@nestjs/jwt";
 import config from './config/index'
+import {CacheModule, CacheInterceptor} from "@nestjs/cache-manager";
 
 @Module({
   imports: [
+    CacheModule.register({
+      isGlobal: true,
+    }),
     JwtModule.registerAsync({
       useFactory: async () => {
         return {
@@ -52,6 +56,10 @@ import config from './config/index'
   ],
   controllers: [AppController, UserController],
   providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: CacheInterceptor,
+    },
     AppService,
     {
       provide: APP_GUARD,
