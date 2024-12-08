@@ -429,6 +429,74 @@ export class IndexerService {
     await stateRepository.save(indexerState)
   }
 
+  async getEventsFromBlocksRange(fromBlock: number, toBlock: number) {
+    const [
+      newCompetitionEvents,
+      setWinnerEvents,
+      winnerLiquidityEvents,
+      tokenCreatedEvents,
+      buyEvents,
+      sellEvents,
+      burnAndSetWinnerEvents
+    ] = await Promise.all([
+      this.tokenFactoryContract.getPastEvents('allEvents', {
+        fromBlock, toBlock, topics: [ this.web3.utils.sha3('NewCompetitionStarted(uint256,uint256)')],
+      }),
+      this.tokenFactoryContract.getPastEvents('allEvents', {
+        fromBlock, toBlock, topics: [ this.web3.utils.sha3('SetWinner(address,uint256,uint256)')],
+      }),
+      this.tokenFactoryContract.getPastEvents('allEvents', {
+        fromBlock, toBlock, topics: [ this.web3.utils.sha3('WinnerLiquidityAdded(address,address,address,address,uint256,uint128,uint256,uint256,uint256)')],
+      }),
+      this.tokenFactoryContract.getPastEvents('allEvents', {
+        fromBlock,
+        toBlock,
+        topics: [
+          this.web3.utils.sha3('TokenCreated(address,string,string,string,address,uint256,uint256)'),
+        ],
+      }),
+      this.tokenFactoryContract.getPastEvents('allEvents', {
+        fromBlock,
+        toBlock,
+        topics: [
+          this.web3.utils.sha3('TokenBuy(address,uint256,uint256,uint256,uint256)'),
+        ],
+      }),
+      this.tokenFactoryContract.getPastEvents('allEvents', {
+        fromBlock,
+        toBlock,
+        topics: [
+          this.web3.utils.sha3('TokenSell(address,uint256,uint256,uint256,uint256)'),
+        ],
+      }),
+      this.tokenFactoryContract.getPastEvents('allEvents', {
+        fromBlock,
+        toBlock,
+        topics: [
+          this.web3.utils.sha3('BurnTokenAndMintWinner(address,address,address,uint256,uint256,uint256,uint256)'),
+        ],
+      })
+    ]) as EventLog[][]
+
+    // concat and sort all events by block number and transaction index
+    const protocolEvents: { data: EventLog; type: string }[] = tokenCreatedEvents
+      .map(data => ({ type: 'create_token', data }))
+      .concat(...buyEvents.map(data => ({ type: 'buy', data })))
+      .concat(...sellEvents.map(data => ({ type: 'sell', data })))
+      .concat(...setWinnerEvents.map(data => ({ type: 'set_winner', data })))
+      .concat(...burnAndSetWinnerEvents.map(data => ({ type: 'burn_token_and_set_winner', data })))
+      .concat(...winnerLiquidityEvents.map(data => ({ type: 'winner_liquidity', data })))
+      .concat(...newCompetitionEvents.map(data => ({ type: 'new_competition', data })))
+      .sort((a, b) => {
+        const blockNumberDiff = Number(a.data.blockNumber) - Number(b.data.blockNumber)
+        if(blockNumberDiff !== 0) {
+          return blockNumberDiff
+        }
+        return Number(a.data.transactionIndex) - Number(b.data.transactionIndex)
+      })
+    return protocolEvents
+  }
+
   async eventsTrackingLoop() {
     const lastIndexedBlockNumber = await this.getLatestIndexedBlockNumber()
     const fromBlockParam = lastIndexedBlockNumber + 1
@@ -444,66 +512,7 @@ export class IndexerService {
       }
 
       if(toBlock - fromBlock >= 1) {
-        const newCompetitionEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
-          fromBlock, toBlock, topics: [ this.web3.utils.sha3('NewCompetitionStarted(uint256,uint256)')],
-        }) as EventLog[];
-
-        const setWinnerEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
-          fromBlock, toBlock, topics: [ this.web3.utils.sha3('SetWinner(address,uint256,uint256)')],
-        }) as EventLog[];
-
-        const winnerLiquidityEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
-          fromBlock, toBlock, topics: [ this.web3.utils.sha3('WinnerLiquidityAdded(address,address,address,address,uint256,uint128,uint256,uint256,uint256)')],
-        }) as EventLog[];
-
-        const tokenCreatedEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
-          fromBlock,
-          toBlock,
-          topics: [
-            this.web3.utils.sha3('TokenCreated(address,string,string,string,address,uint256,uint256)'),
-          ],
-        }) as EventLog[];
-
-        const buyEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
-          fromBlock,
-          toBlock,
-          topics: [
-            this.web3.utils.sha3('TokenBuy(address,uint256,uint256,uint256,uint256)'),
-          ],
-        }) as EventLog[];
-
-        const sellEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
-          fromBlock,
-          toBlock,
-          topics: [
-            this.web3.utils.sha3('TokenSell(address,uint256,uint256,uint256,uint256)'),
-          ],
-        }) as EventLog[];
-
-        const burnAndSetWinnerEvents = await this.tokenFactoryContract.getPastEvents('allEvents', {
-          fromBlock,
-          toBlock,
-          topics: [
-            this.web3.utils.sha3('BurnTokenAndMintWinner(address,address,address,uint256,uint256,uint256,uint256)'),
-          ],
-        }) as EventLog[];
-
-        // concat and sort all events by block number and transaction index
-        const protocolEvents: { data: EventLog; type: string }[] = tokenCreatedEvents
-          .map(data => ({ type: 'create_token', data }))
-          .concat(...buyEvents.map(data => ({ type: 'buy', data })))
-          .concat(...sellEvents.map(data => ({ type: 'sell', data })))
-          .concat(...setWinnerEvents.map(data => ({ type: 'set_winner', data })))
-          .concat(...burnAndSetWinnerEvents.map(data => ({ type: 'burn_token_and_set_winner', data })))
-          .concat(...winnerLiquidityEvents.map(data => ({ type: 'winner_liquidity', data })))
-          .concat(...newCompetitionEvents.map(data => ({ type: 'new_competition', data })))
-          .sort((a, b) => {
-            const blockNumberDiff = Number(a.data.blockNumber) - Number(b.data.blockNumber)
-            if(blockNumberDiff !== 0) {
-              return blockNumberDiff
-            }
-            return Number(a.data.transactionIndex) - Number(b.data.transactionIndex)
-          })
+        const protocolEvents = await this.getEventsFromBlocksRange(fromBlock, toBlock)
 
         await this.dataSource.manager.transaction(async (transactionalEntityManager) => {
           for(const protocolEvent of protocolEvents) {
@@ -541,11 +550,11 @@ export class IndexerService {
           }
         })
 
-        this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), new tokens=${tokenCreatedEvents.length}, trade=${[...buyEvents, ...sellEvents].length} (buy=${buyEvents.length}, sell=${sellEvents.length}), SetWinner=${setWinnerEvents.length}, WinnerLiquidityAdded=${winnerLiquidityEvents.length}, NewCompetitionStarted=${newCompetitionEvents.length}`)
+        this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), events count=${protocolEvents.length}`)
       } else {
         // Wait for blockchain
         toBlock = fromBlockParam - 1
-        await new Promise(resolve => setTimeout(resolve, 5 * 1000));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     } catch (e) {
       toBlock = fromBlockParam - 1
