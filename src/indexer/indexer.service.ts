@@ -232,12 +232,17 @@ export class IndexerService {
         holder.balance = String(BigInt(holder.balance) + amountOut)
         await tokenHoldersRepository.save(holder)
 
-        price = (new Decimal(amountIn.toString()).div(new Decimal(amountOut.toString()))).toFixed(10)
-        token.totalSupply = String(BigInt(token.totalSupply) + amountOut)
+        const priceDecimal = new Decimal(amountIn.toString()).div(new Decimal(amountOut.toString()))
+        const totalSupplyDecimal = new Decimal(token.totalSupply)
+          .add(new Decimal(String(amountOut)))
+        const marketCapDecimal = priceDecimal.mul(totalSupplyDecimal.div(10 ** 18))
+        price = priceDecimal.toFixed(10)
+        token.totalSupply = totalSupplyDecimal.toString()
         token.price = price
-        await tokenRepository.save(token)
+        token.marketCap = marketCapDecimal.toFixed(10)
 
-        this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}, token price: ${token.price}`)
+        await tokenRepository.save(token)
+        this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}, token price: ${token.price}, marketCap=${token.marketCap}`)
       } catch (e) {
         this.logger.error(`Failed to process token holder balance [${type}]: tokenAddress=${tokenAddress}, userAddress=${userAddress}`, e)
         throw new Error(e);
@@ -252,11 +257,18 @@ export class IndexerService {
         holder.balance = String(BigInt(holder.balance) - amountIn)
         await tokenHoldersRepository.save(holder)
 
-        price = (new Decimal(amountOut.toString()).div(new Decimal(amountIn.toString()))).toFixed(10)
-        token.totalSupply = String(BigInt(token.totalSupply) - amountIn)
+        const priceDecimal = new Decimal(amountOut.toString()).div(new Decimal(amountIn.toString()))
+        const totalSupplyDecimal = new Decimal(token.totalSupply)
+          .sub(new Decimal(String(amountIn)))
+        const marketCapDecimal = priceDecimal.mul(totalSupplyDecimal.div(10 ** 18))
+
+        price = priceDecimal.toFixed(10)
+        token.totalSupply = totalSupplyDecimal.toString()
         token.price = price
+        token.marketCap = marketCapDecimal.toFixed(10)
+
         await tokenRepository.save(token)
-        this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}, token price=${token.price}`)
+        this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}, token price=${token.price}, , marketCap=${token.marketCap}`)
       } catch (e) {
         this.logger.error(`Failed to process token holder balance [${type}]: tokenAddress=${tokenAddress}, userAddress=${userAddress}`, e)
         throw new Error(e);

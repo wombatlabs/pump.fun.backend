@@ -1,6 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {IsOptional, IsString} from 'class-validator';
+import {IsEnum, IsOptional, IsString} from 'class-validator';
 import {Transform, Type} from "class-transformer";
+import {SortOrder} from "../types";
+
+// List of sortable props from TokenEntity
+enum SortField {
+  timestamp = 'timestamp',
+  marketCap = 'marketCap'
+}
 
 export class GetTokensDto {
   @ApiProperty({ type: String, required: false, default: '' })
@@ -22,6 +29,16 @@ export class GetTokensDto {
   @Type(() => String)
   @IsString()
   offset: number;
+
+  @ApiProperty({ enum: SortField, required: false })
+  @IsOptional()
+  @IsEnum(SortField, { message: `Sort field must be one of ${Object.keys(SortField).join(',')}` })
+  sortingField?: SortField;
+
+  @ApiProperty({ enum: SortOrder, required: false })
+  @IsOptional()
+  @IsEnum(SortOrder, { message: 'Sort order must be ASC or DESC' })
+  sortingOrder?: SortOrder;
 }
 
 export class GetTokenBalancesDto {

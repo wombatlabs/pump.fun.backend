@@ -41,7 +41,7 @@ export class AppService {
     }
 
     async getTokens(dto: GetTokensDto){
-        const { search, offset, limit, isWinner } = dto
+        const { search, offset, limit, isWinner, sortingField, sortingOrder } = dto
         const query = this.dataSource.getRepository(Token)
           .createQueryBuilder('token')
           .leftJoinAndSelect('token.user', 'user')
@@ -49,9 +49,6 @@ export class AppService {
           .loadRelationCountAndMap('token.commentsCount', 'token.comments')
           .offset(offset)
           .limit(limit)
-          .orderBy({
-              timestamp: 'DESC'
-          })
 
         if(search) {
             query.where('LOWER(token.name) LIKE LOWER(:name)', { name: `%${search}%` })
@@ -62,6 +59,16 @@ export class AppService {
 
         if(typeof isWinner !== 'undefined') {
             query.andWhere({ isWinner })
+        }
+
+        if(sortingField && sortingOrder) {
+            query.orderBy({
+                [`"${sortingField}"`]: sortingOrder
+            })
+        } else {
+            query.orderBy({
+                timestamp: 'DESC'
+            })
         }
 
         return await query.getMany()

@@ -95,20 +95,12 @@ export class Token {
   price: string;
 
   @ApiProperty()
-  @Column('bool', { default: false })
-  isWinner: boolean;
-
-  protected marketCap: String;
+  @Column({ type: 'double precision', default: 0, transformer: new ColumnNumericTransformer() })
+  marketCap: string;
 
   @ApiProperty()
-  @AfterInsert()
-  @AfterUpdate()
-  @AfterLoad()
-  updateMarketCap() {
-    this.marketCap = new Decimal(this.price)
-      .mul(new Decimal(this.totalSupply).div(10 ** 18))
-      .toFixed()
-  }
+  @Column('bool', { default: false })
+  isWinner: boolean;
 
   @ApiProperty()
   @CreateDateColumn({ name: 'createdAt' })

@@ -5,6 +5,11 @@ export enum TradeType {
   sell = 'sell'
 }
 
+export enum SortOrder {
+  ASC = 'ASC',
+  DESC = 'DESC',
+}
+
 export interface TokenMetadata {
   userAddress: string
   name: string
