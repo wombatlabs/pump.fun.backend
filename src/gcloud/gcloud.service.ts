@@ -18,7 +18,7 @@ export class GcloudService {
 
   public async uploadImage(uploadedFile: Express.Multer.File, filename: string) {
     const bucket = this.storage.bucket('pump-fun-metadata')
-    const storageFileUrl = `images/${filename}.jpg`
+    const storageFileUrl = `images/${filename}`
     const file = bucket.file(storageFileUrl)
     await file.save(uploadedFile.buffer)
     return `https://storage.googleapis.com/pump-fun-metadata/${storageFileUrl}`
