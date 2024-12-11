@@ -1,6 +1,6 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {Contract, ContractAbi, EventLog, Web3} from "web3";
-import {TokenMetadata, TradeType} from "../types";
+import {ProtocolEvent, TokenMetadata, TradeType} from "../types";
 import axios from "axios";
 import * as process from "process";
 import {
@@ -27,7 +27,8 @@ export class IndexerService {
   private readonly web3: Web3
   private readonly accountAddress: string
   private readonly tokenFactoryContract: Contract<ContractAbi>
-  private readonly blocksIndexingRange = 1000
+  private readonly maxBlocksRange = 1000
+  private readonly maxBlocksBatchSize = 5
 
   constructor(
     private configService: ConfigService,
@@ -37,15 +38,15 @@ export class IndexerService {
   ) {
     const rpcUrl = configService.get('RPC_URL')
     const contractAddress = configService.get('TOKEN_FACTORY_ADDRESS')
-    const initialBlockNumber = configService.get('INDEXER_INITIAL_BLOCK_NUMBER')
+    const privateKey = configService.get('SERVICE_PRIVATE_KEY')
 
     if(!contractAddress) {
       this.logger.error(`[TOKEN_FACTORY_ADDRESS] is missing but required, exit`)
       process.exit(1)
     }
 
-    if(!initialBlockNumber) {
-      this.logger.error(`[INDEXER_INITIAL_BLOCK_NUMBER] is missing but required, exit`)
+    if(!privateKey) {
+      this.logger.error(`[SERVICE_PRIVATE_KEY] is missing but required, exit`)
       process.exit(1)
     }
 
@@ -53,16 +54,14 @@ export class IndexerService {
       rpcUrl
     }, TOKEN_FACTORY_ADDRESS=${
       contractAddress
-    }, INDEXER_INITIAL_BLOCK_NUMBER=${
-      initialBlockNumber
     }`)
 
     this.web3 = new Web3(rpcUrl);
-    const account = this.web3.eth.accounts.privateKeyToAccount(configService.get('SERVICE_PRIVATE_KEY'))
+    const account = this.web3.eth.accounts.privateKeyToAccount(privateKey)
     this.accountAddress = account.address
     this.web3.eth.accounts.wallet.add(account);
-    this.logger.log(`Service account address=${account.address}`)
     this.tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, contractAddress);
+    this.logger.log(`Service account address=${account.address}`)
     this.bootstrap().then(
       () => {
         this.eventsTrackingLoop()
@@ -410,7 +409,7 @@ export class IndexerService {
     this.logger.log(`NewCompetitionStarted: competitionId=${competitionId}, timestamp=${timestamp}, txnHash=${txnHash}`);
   }
 
-  private async getLatestIndexedBlockNumber() {
+  public async getLatestIndexedBlockNumber() {
     const indexerState = await this.dataSource.manager.findOne(IndexerState, {
       where: {},
     })
@@ -478,8 +477,7 @@ export class IndexerService {
       })
     ]) as EventLog[][]
 
-    // concat and sort all events by block number and transaction index
-    const protocolEvents: { data: EventLog; type: string }[] = tokenCreatedEvents
+    return tokenCreatedEvents
       .map(data => ({ type: 'create_token', data }))
       .concat(...buyEvents.map(data => ({ type: 'buy', data })))
       .concat(...sellEvents.map(data => ({ type: 'sell', data })))
@@ -487,14 +485,6 @@ export class IndexerService {
       .concat(...burnAndSetWinnerEvents.map(data => ({ type: 'burn_token_and_set_winner', data })))
       .concat(...winnerLiquidityEvents.map(data => ({ type: 'winner_liquidity', data })))
       .concat(...newCompetitionEvents.map(data => ({ type: 'new_competition', data })))
-      .sort((a, b) => {
-        const blockNumberDiff = Number(a.data.blockNumber) - Number(b.data.blockNumber)
-        if(blockNumberDiff !== 0) {
-          return blockNumberDiff
-        }
-        return Number(a.data.transactionIndex) - Number(b.data.transactionIndex)
-      })
-    return protocolEvents
   }
 
   async eventsTrackingLoop() {
@@ -506,13 +496,34 @@ export class IndexerService {
 
     try {
       const blockchainBlockNumber = +(String(await this.web3.eth.getBlockNumber()))
-      toBlock = fromBlock + this.blocksIndexingRange - 1
+      toBlock = fromBlock + this.maxBlocksRange * this.maxBlocksBatchSize - 1
       if(toBlock > blockchainBlockNumber) {
         toBlock = blockchainBlockNumber
       }
 
       if(toBlock - fromBlock >= 1) {
-        const protocolEvents = await this.getEventsFromBlocksRange(fromBlock, toBlock)
+        const delta = toBlock - fromBlock
+        const numberOfBatches = Math.ceil(delta / this.maxBlocksRange)
+
+        const protocolEventsBatch = await Promise.all(
+          new Array(numberOfBatches)
+            .fill(null)
+            .map(async (_, index, arr) => {
+              const batchFromBlock = fromBlock + index * this.maxBlocksRange
+              const batchToBlock = Math.min(batchFromBlock + this.maxBlocksRange, toBlock)
+              return await this.getEventsFromBlocksRange(batchFromBlock, batchToBlock)
+            })
+        )
+
+        const protocolEvents = protocolEventsBatch
+          .flat()
+          .sort((a, b) => {
+            const blockNumberDiff = Number(a.data.blockNumber) - Number(b.data.blockNumber)
+            if(blockNumberDiff !== 0) {
+              return blockNumberDiff
+            }
+            return Number(a.data.transactionIndex) - Number(b.data.transactionIndex)
+          })
 
         await this.dataSource.manager.transaction(async (transactionalEntityManager) => {
           for(const protocolEvent of protocolEvents) {

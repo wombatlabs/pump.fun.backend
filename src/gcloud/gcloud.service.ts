@@ -1,18 +1,18 @@
-import {Injectable, Logger} from '@nestjs/common';
+import {Injectable} from '@nestjs/common';
 import {ConfigService} from "@nestjs/config";
 import {Storage} from "@google-cloud/storage";
 import {AddTokenMetadataDto} from "../dto/metadata.dto";
+import {JWTInput} from "google-auth-library/build/src/auth/credentials";
 
 @Injectable()
 export class GcloudService {
-  private readonly logger = new Logger(GcloudService.name);
   private readonly storage: Storage;
 
   constructor(private readonly configService: ConfigService) {
+    const googleCloudConfig = this.configService.get<JWTInput>('GOOGLE_CLOUD_CONFIG')
     this.storage = new Storage({
-      projectId: 'pumpfun-440412',
-      // keyFilename: serviceKey,
-      credentials: this.configService.get('GOOGLE_CLOUD_CONFIG')
+      projectId: googleCloudConfig.project_id,
+      credentials: googleCloudConfig
     })
   }
 

@@ -27,3 +27,10 @@ export interface Candle {
   volume: string
   time: string
 }
+
+export interface ProtocolEvent {
+  data: EventLog
+  type: ProtocolEventType
+}
+
+export type ProtocolEventType = 'create_token' | 'buy' | 'sell' | 'set_winner' | 'burn_token_and_set_winner' | 'winner_liquidity' | 'new_competition'
