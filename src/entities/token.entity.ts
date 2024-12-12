@@ -58,10 +58,6 @@ export class Token {
   @Column({ type: 'json', nullable: true })
   uriData: TokenMetadata | null;
 
-  // @ApiProperty()
-  // @Column({ type: 'integer' })
-  // competitionId: number;
-
   @ManyToOne(() => CompetitionEntity, {
     eager: true
   })

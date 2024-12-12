@@ -5,22 +5,6 @@ import {existsSync, readFileSync} from "fs";
 const parseStringArray = (value: string) =>
   value.split(',').map(item => item.trim().toLowerCase()).filter(_ => _)
 
-const readTestPrivateKey = () => {
-  const filePath = pathResolve(__dirname, '..', '../keypair/private.pem')
-  if(existsSync(filePath)) {
-    return readFileSync(pathResolve(__dirname, '..', '../keypair/private.pem'))
-  }
-  return ''
-}
-
-const readTestPublicKey = () => {
-  const filePath = pathResolve(__dirname, '..', '../keypair/public.pem')
-  if(existsSync(filePath)) {
-    return readFileSync(filePath)
-  }
-  return ''
-}
-
 const getGoogleCloudConfig = () => {
   return {
     "type": "service_account",

@@ -6,8 +6,14 @@ import {
   Logger,
   NotFoundException,
   Post,
-  Query, UploadedFile, UseInterceptors,
-  Headers, UseGuards, Request, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator
+  Query,
+  UploadedFile,
+  UseInterceptors,
+  UseGuards,
+  Request,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator
 } from '@nestjs/common';
 import {ApiBearerAuth, ApiTags} from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
@@ -26,6 +32,7 @@ import {plainToInstance} from "class-transformer";
 import {JwtUserAccount} from "./entities/user-account.entity";
 import {GetWinnerLiquidityProvisionsDto} from "./dto/winner.liquidity.dto";
 import {CacheTTL} from "@nestjs/common/cache";
+import {IndexerService} from "./indexer/indexer.service";
 import {GetCompetitionsDto} from "./dto/competition.dto";
 
 @SkipThrottle()
@@ -37,7 +44,8 @@ export class AppController {
     private readonly configService: ConfigService,
     private readonly appService: AppService,
     private readonly userService: UserService,
-    private readonly gCloudService: GcloudService
+    private readonly gCloudService: GcloudService,
+    private readonly indexerService: IndexerService,
   ) {}
   @Get('/version')
   getVersion() {
@@ -45,8 +53,11 @@ export class AppController {
   }
 
   @Get('/status')
-  getStatus() {
-    return 'OK';
+  async getStatus() {
+    const latestIndexedBlock = await this.indexerService.getLatestIndexedBlockNumber();
+    return {
+      latestIndexedBlock,
+    }
   }
 
   @CacheTTL(200)
@@ -130,7 +141,6 @@ export class AppController {
         ]
       })
     ) file: Express.Multer.File,
-    @Headers() headers
   ) {
     if(!req.user) {
       throw new BadRequestException('InvalidJWT')
