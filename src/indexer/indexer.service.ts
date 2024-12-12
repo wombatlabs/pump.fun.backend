@@ -387,7 +387,7 @@ export class IndexerService {
     const competitionId = Number(values['competitionId'] as bigint)
     const timestamp = Number(values['timestamp'] as bigint)
 
-    const competitions = await this.appService.getCompetitions()
+    const competitions = await this.appService.getCompetitions({ limit: 1 })
     if(competitions.length > 0) {
       const currentCompetition = competitions[0]
       if(currentCompetition) {

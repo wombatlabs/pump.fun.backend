@@ -16,6 +16,7 @@ import {GetCandlesDto, GetTradesDto} from "./dto/trade.dto";
 import {UserService} from "./user/user.service";
 import {Candle} from "./types";
 import {GetWinnerLiquidityProvisionsDto} from "./dto/winner.liquidity.dto";
+import {GetCompetitionsDto} from "./dto/competition.dto";
 
 @Injectable()
 export class AppService {
@@ -109,13 +110,19 @@ export class AppService {
         })
     }
 
-    async getCompetitions() {
+    async getCompetitions(dto: GetCompetitionsDto = {}) {
+        const {offset = 0, limit = 100, competitionId} = dto
+
         return await this.dataSource.manager.find(CompetitionEntity, {
             relations: ['winnerToken'],
-            where: {},
+            where: {
+                competitionId
+            },
             order: {
                 competitionId: 'desc'
-            }
+            },
+            skip: offset,
+            take: limit
         })
     }
 

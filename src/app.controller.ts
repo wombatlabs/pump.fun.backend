@@ -26,6 +26,7 @@ import {plainToInstance} from "class-transformer";
 import {JwtUserAccount} from "./entities/user-account.entity";
 import {GetWinnerLiquidityProvisionsDto} from "./dto/winner.liquidity.dto";
 import {CacheTTL} from "@nestjs/common/cache";
+import {GetCompetitionsDto} from "./dto/competition.dto";
 
 @SkipThrottle()
 @ApiTags('app')
@@ -99,8 +100,8 @@ export class AppController {
 
   @CacheTTL(200)
   @Get('/competitions')
-  getCompetitions() {
-    return this.appService.getCompetitions()
+  getCompetitions(@Query() dto: GetCompetitionsDto) {
+    return this.appService.getCompetitions(dto)
   }
 
   @CacheTTL(200)
