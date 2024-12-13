@@ -16,6 +16,8 @@ import { UserController } from './user/user.controller';
 import {JwtModule} from "@nestjs/jwt";
 import config from './config/index'
 import {CacheModule, CacheInterceptor} from "@nestjs/cache-manager";
+import { AdminController } from './admin/admin.controller';
+import { AdminService } from './admin/admin.service';
 
 @Module({
   imports: [
@@ -54,7 +56,7 @@ import {CacheModule, CacheInterceptor} from "@nestjs/cache-manager";
     }]),
     PrometheusModule.register(),
   ],
-  controllers: [AppController, UserController],
+  controllers: [AppController, UserController, AdminController],
   providers: [
     {
       provide: APP_INTERCEPTOR,
@@ -67,7 +69,8 @@ import {CacheModule, CacheInterceptor} from "@nestjs/cache-manager";
     },
     UserService,
     GcloudService,
-    IndexerService
+    IndexerService,
+    AdminService
   ],
 })
 export class AppModule {}

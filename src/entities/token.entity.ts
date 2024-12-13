@@ -99,6 +99,10 @@ export class Token {
   isWinner: boolean;
 
   @ApiProperty()
+  @Column('bool', { default: true })
+  isEnabled: boolean;
+
+  @ApiProperty()
   @CreateDateColumn({ name: 'createdAt' })
   createdAt: Date;
 

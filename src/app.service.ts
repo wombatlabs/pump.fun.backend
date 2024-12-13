@@ -48,6 +48,7 @@ export class AppService {
           .leftJoinAndSelect('token.user', 'user')
           .leftJoinAndSelect('token.competition', 'competition')
           .loadRelationCountAndMap('token.commentsCount', 'token.comments')
+          .where('token.isEnabled', { isEnabled: true })
           .offset(offset)
           .limit(limit)
 
