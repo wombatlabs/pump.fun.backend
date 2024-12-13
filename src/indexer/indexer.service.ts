@@ -1,6 +1,6 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {Contract, ContractAbi, EventLog, Web3} from "web3";
-import {ProtocolEvent, TokenMetadata, TradeType} from "../types";
+import {TokenMetadata, TradeType} from "../types";
 import axios from "axios";
 import * as process from "process";
 import {
