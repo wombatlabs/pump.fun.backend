@@ -17,11 +17,12 @@ import {UserService} from "../user/user.service";
 import {DataSource, EntityManager} from "typeorm";
 import * as TokenFactoryABI from "../abi/TokenFactory.json";
 import {AppService} from "../app.service";
-import {ZeroAddress} from "ethers";
+import {parseUnits, ZeroAddress} from "ethers";
 import Decimal from "decimal.js";
 import * as moment from "moment-timezone";
 import {Moment} from "moment";
 import {getRandomNumberFromInterval} from "../utils";
+import {SchedulerRegistry} from "@nestjs/schedule";
 
 @Injectable()
 export class IndexerService {
@@ -37,6 +38,7 @@ export class IndexerService {
     private userService: UserService,
     private appService: AppService,
     private dataSource: DataSource,
+    private schedulerRegistry: SchedulerRegistry
   ) {
     const rpcUrl = configService.get('RPC_URL')
     const contractAddress = configService.get('TOKEN_FACTORY_ADDRESS')
@@ -626,7 +628,8 @@ export class IndexerService {
   }
 
   async scheduleNextCompetition() {
-    const daysInterval = 7
+    const schedulerName = 'competition_scheduler'
+    const daysInterval = this.configService.get<number>('COMPETITION_DAYS_INTERVAL')
     const timeZone = 'America/Los_Angeles'
     let nextCompetitionDate: Moment
 
@@ -659,16 +662,75 @@ export class IndexerService {
       }
     }
 
+    // nextCompetitionDate = moment().add(30, 'seconds')
+
     if(nextCompetitionDate) {
       this.logger.log(`Next competition scheduled at ${
         nextCompetitionDate.format('YYYY-MM-DD HH:mm:ss')
-      } ${timeZone} timezone`)
+      }, ${timeZone} timezone`)
+
+      const callbackTimeout = setTimeout(async () => {
+        this.schedulerRegistry.deleteTimeout(schedulerName)
+        await this.initiateNewCompetition()
+        await new Promise(resolve => setTimeout(resolve, 60 * 1000))
+        return this.scheduleNextCompetition()
+      }, nextCompetitionDate.diff(moment()))
+      this.schedulerRegistry.addTimeout(schedulerName, callbackTimeout)
     } else {
       this.logger.error('Failed to set new competition date')
     }
   }
 
-  private async startNewCompetition() {
+  async initiateNewCompetition() {
+    const attemptsCount = 3
+    const tokenCollateralThreshold = BigInt(parseUnits(
+      this.configService.get<number>('COMPETITION_COLLATERAL_THRESHOLD').toString(), 18
+    ))
+
+    for(let i = 0; i < attemptsCount; i++) {
+      try {
+        let isCollateralThresholdReached = false
+        const competitionId = await this.getCompetitionId()
+        this.logger.log(`Current competition id=${competitionId}`)
+        const tokens = await this.appService.getTokens({
+          competitionId: Number(competitionId),
+          limit: 10000
+        })
+
+        this.logger.log(`Checking tokens (count=${tokens.length}) for minimum collateral=${tokenCollateralThreshold} wei...`)
+        for(const token of tokens) {
+          const collateral = await this.tokenFactoryContract.methods
+            .collateralById(competitionId, token.address)
+            .call() as bigint
+
+          if(collateral >= tokenCollateralThreshold) {
+            isCollateralThresholdReached = true
+            this.logger.log(`Token address=${token} received ${collateral} wei in collateral`)
+            break;
+          }
+        }
+
+        if(isCollateralThresholdReached) {
+          this.logger.log(`Initiate new competition...`)
+          const newCompetitionTxHash = await this.callStartNewCompetitionTx()
+          this.logger.log(`New competition txHash: ${newCompetitionTxHash}`)
+          await this.sleep(5000)
+          const newCompetitionId = await this.getCompetitionId()
+          this.logger.log(`Started new competition id=${newCompetitionId}; calling token winner...`)
+          const setWinnerHash = await this.setWinnerByCompetitionId(competitionId)
+          this.logger.log(`setWinnerByCompetitionId called, txnHash=${setWinnerHash}`)
+        } else {
+          this.logger.log(`No tokens reached minimum collateral=${tokenCollateralThreshold} wei. Waiting for the next iteration.`)
+        }
+        break;
+      } catch (e) {
+        this.logger.warn(`Failed to send setWinner transaction, attempt: ${(i + 1)} / ${attemptsCount}:`, e)
+        await this.sleep(10000)
+      }
+    }
+  }
+
+  private async callStartNewCompetitionTx() {
     const gasFees = await this.tokenFactoryContract.methods
       .startNewCompetition()
       .estimateGas({ from: this.accountAddress });
@@ -696,29 +758,5 @@ export class IndexerService {
     return await this.tokenFactoryContract.methods
       .currentCompetitionId()
       .call() as bigint
-  }
-
-  // @Cron(CronExpression.EVERY_WEEK, {
-  //   timeZone: 'America/Los_Angeles'
-  // })
-  async initiateNewCompetition() {
-    const attemptsCount = 3
-
-    for(let i = 0; i < attemptsCount; i++) {
-      try {
-        const currentCompetitionId = await this.getCompetitionId()
-        this.logger.log(`Current competition id=${currentCompetitionId}`)
-        // await this.startNewCompetition()
-        // await this.sleep(4000)
-        // const newCompetitionId = await this.getCompetitionId()
-        // this.logger.log(`Started new competition id=${newCompetitionId}`)
-        // const setWinnerHash = await this.setWinnerByCompetitionId(currentCompetitionId)
-        // this.logger.log(`New setWinner is called, txnHash=${setWinnerHash}`)
-        break;
-      } catch (e) {
-        this.logger.warn(`Failed to send setWinner transaction, attempt: ${(i + 1)} / ${attemptsCount}:`, e)
-        await this.sleep(4000)
-      }
-    }
   }
 }
