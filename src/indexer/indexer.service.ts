@@ -111,9 +111,10 @@ export class IndexerService {
       process.exit(1)
     }
 
-    const competition = await transactionalEntityManager.findOne(CompetitionEntity, {
-      where: { competitionId }
-    })
+    const [competition] = await this.appService.getCompetitions({
+      competitionId
+    }, transactionalEntityManager)
+
     if(!competition) {
       this.logger.error(`Failed to add winner: competition=${competitionId} not found in database, exit`)
       process.exit(1)
