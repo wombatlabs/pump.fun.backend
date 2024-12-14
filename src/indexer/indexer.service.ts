@@ -19,7 +19,9 @@ import * as TokenFactoryABI from "../abi/TokenFactory.json";
 import {AppService} from "../app.service";
 import {ZeroAddress} from "ethers";
 import Decimal from "decimal.js";
-import {Cron, CronExpression} from "@nestjs/schedule";
+import * as moment from "moment-timezone";
+import {Moment} from "moment";
+import {getRandomNumberFromInterval} from "../utils";
 
 @Injectable()
 export class IndexerService {
@@ -64,7 +66,8 @@ export class IndexerService {
     this.logger.log(`Service account address=${account.address}`)
     this.bootstrap().then(
       () => {
-        this.eventsTrackingLoop()
+        this.scheduleNextCompetition()
+        // this.eventsTrackingLoop()
       }
     )
     this.logger.log(`App service started`)
@@ -622,6 +625,49 @@ export class IndexerService {
     return sendTxn.transactionHash.toString()
   }
 
+  async scheduleNextCompetition() {
+    const daysInterval = 7
+    const timeZone = 'America/Los_Angeles'
+    let nextCompetitionDate: Moment
+
+    const [prevCompetition] = await this.appService.getCompetitions({ limit: 1 })
+
+    if(prevCompetition) {
+      const { timestampStart, isCompleted } = prevCompetition
+
+      // Competition starts every 7 day at a random time within one hour around midnight
+      // Random is important otherwise they just make a new token 1 second before ending, and pumping it with a lot of ONE
+      const randomMinutesNumber = getRandomNumberFromInterval(1, 60)
+      const lastCompetitionDeltaMs = moment().diff(moment(timestampStart * 1000))
+      // Regular interval was expired since the last competition start
+      const isIntervalExpired = lastCompetitionDeltaMs > daysInterval * 24 * 60 * 60 * 1000
+
+      if(isCompleted || isIntervalExpired) {
+        // Start new competition tomorrow at 00:00
+        nextCompetitionDate = moment()
+          .tz(timeZone)
+          .add(1, 'days')
+          .startOf('day')
+          .add(randomMinutesNumber, 'minutes')
+      } else {
+        // Start new competition in 7 days at 00:00
+        nextCompetitionDate = moment(timestampStart * 1000)
+          .tz(timeZone)
+          .add(daysInterval, 'days')
+          .startOf('day')
+          .add(randomMinutesNumber, 'minutes')
+      }
+    }
+
+    if(nextCompetitionDate) {
+      this.logger.log(`Next competition scheduled at ${
+        nextCompetitionDate.format('YYYY-MM-DD HH:mm:ss')
+      } ${timeZone} timezone`)
+    } else {
+      this.logger.error('Failed to set new competition date')
+    }
+  }
+
   private async startNewCompetition() {
     const gasFees = await this.tokenFactoryContract.methods
       .startNewCompetition()
@@ -652,23 +698,25 @@ export class IndexerService {
       .call() as bigint
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, {
-    timeZone: 'America/Los_Angeles'
-  })
-  async callSetWinner() {
-    for(let i = 0; i < 3; i++) {
+  // @Cron(CronExpression.EVERY_WEEK, {
+  //   timeZone: 'America/Los_Angeles'
+  // })
+  async initiateNewCompetition() {
+    const attemptsCount = 3
+
+    for(let i = 0; i < attemptsCount; i++) {
       try {
         const currentCompetitionId = await this.getCompetitionId()
         this.logger.log(`Current competition id=${currentCompetitionId}`)
-        await this.startNewCompetition()
-        await this.sleep(4000)
-        const newCompetitionId = await this.getCompetitionId()
-        this.logger.log(`Started new competition id=${newCompetitionId}`)
-        const setWinnerHash = await this.setWinnerByCompetitionId(currentCompetitionId)
-        this.logger.log(`New setWinner is called, txnHash=${setWinnerHash}`)
+        // await this.startNewCompetition()
+        // await this.sleep(4000)
+        // const newCompetitionId = await this.getCompetitionId()
+        // this.logger.log(`Started new competition id=${newCompetitionId}`)
+        // const setWinnerHash = await this.setWinnerByCompetitionId(currentCompetitionId)
+        // this.logger.log(`New setWinner is called, txnHash=${setWinnerHash}`)
         break;
       } catch (e) {
-        this.logger.warn(`Failed to send setWinner transaction, attempt: ${(i + 1)} / 3:`, e)
+        this.logger.warn(`Failed to send setWinner transaction, attempt: ${(i + 1)} / ${attemptsCount}:`, e)
         await this.sleep(4000)
       }
     }
