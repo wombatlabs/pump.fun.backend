@@ -28,7 +28,7 @@ export class IndexerService {
   private readonly accountAddress: string
   private readonly tokenFactoryContract: Contract<ContractAbi>
   private readonly maxBlocksRange = 1000
-  private readonly maxBlocksBatchSize = 10
+  private readonly maxBlocksBatchSize = 5
 
   constructor(
     private configService: ConfigService,
