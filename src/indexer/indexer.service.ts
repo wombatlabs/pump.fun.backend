@@ -28,7 +28,7 @@ export class IndexerService {
   private readonly accountAddress: string
   private readonly tokenFactoryContract: Contract<ContractAbi>
   private readonly maxBlocksRange = 1000
-  private readonly maxBlocksBatchSize = 5
+  private readonly maxBlocksBatchSize = 10
 
   constructor(
     private configService: ConfigService,
@@ -386,15 +386,20 @@ export class IndexerService {
     const competitionId = Number(values['competitionId'] as bigint)
     const timestamp = Number(values['timestamp'] as bigint)
 
-    const competitions = await this.appService.getCompetitions({ limit: 1 })
-    if(competitions.length > 0) {
-      const currentCompetition = competitions[0]
-      if(currentCompetition) {
-        currentCompetition.isCompleted = true
-        currentCompetition.timestampEnd = timestamp
-        await transactionalEntityManager.save(currentCompetition)
-      }
+    const prevCompetitionId = competitionId - 1
+    const [prevCompetition] = await this.appService.getCompetitions({
+      competitionId: prevCompetitionId
+    }, transactionalEntityManager)
 
+    if(prevCompetition) {
+      prevCompetition.isCompleted = true
+      prevCompetition.timestampEnd = timestamp
+      await transactionalEntityManager.save(prevCompetition)
+    } else {
+      if(competitionId > 2) {
+        this.logger.error(`Failed to get prev competition=${prevCompetitionId}, new competitionId=${competitionId}, exit`)
+        process.exit(1)
+      }
     }
 
     await transactionalEntityManager.insert(CompetitionEntity, {

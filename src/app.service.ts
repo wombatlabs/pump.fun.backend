@@ -111,10 +111,10 @@ export class AppService {
         })
     }
 
-    async getCompetitions(dto: GetCompetitionsDto = {}) {
+    async getCompetitions(dto: GetCompetitionsDto = {}, entityManager?: EntityManager) {
         const {offset = 0, limit = 100, competitionId} = dto
 
-        return await this.dataSource.manager.find(CompetitionEntity, {
+        return await (entityManager || this.dataSource.manager).find(CompetitionEntity, {
             relations: ['winnerToken'],
             where: {
                 competitionId
