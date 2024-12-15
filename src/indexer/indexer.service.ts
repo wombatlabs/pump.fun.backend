@@ -652,25 +652,25 @@ export class IndexerService {
       .call() as bigint
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, {
-    timeZone: 'America/Los_Angeles'
-  })
-  async callSetWinner() {
-    for(let i = 0; i < 3; i++) {
-      try {
-        const currentCompetitionId = await this.getCompetitionId()
-        this.logger.log(`Current competition id=${currentCompetitionId}`)
-        await this.startNewCompetition()
-        await this.sleep(4000)
-        const newCompetitionId = await this.getCompetitionId()
-        this.logger.log(`Started new competition id=${newCompetitionId}`)
-        const setWinnerHash = await this.setWinnerByCompetitionId(currentCompetitionId)
-        this.logger.log(`New setWinner is called, txnHash=${setWinnerHash}`)
-        break;
-      } catch (e) {
-        this.logger.warn(`Failed to send setWinner transaction, attempt: ${(i + 1)} / 3:`, e)
-        await this.sleep(4000)
-      }
-    }
-  }
+  // @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, {
+  //   timeZone: 'America/Los_Angeles'
+  // })
+  // async callSetWinner() {
+  //   for(let i = 0; i < 3; i++) {
+  //     try {
+  //       const currentCompetitionId = await this.getCompetitionId()
+  //       this.logger.log(`Current competition id=${currentCompetitionId}`)
+  //       await this.startNewCompetition()
+  //       await this.sleep(4000)
+  //       const newCompetitionId = await this.getCompetitionId()
+  //       this.logger.log(`Started new competition id=${newCompetitionId}`)
+  //       const setWinnerHash = await this.setWinnerByCompetitionId(currentCompetitionId)
+  //       this.logger.log(`New setWinner is called, txnHash=${setWinnerHash}`)
+  //       break;
+  //     } catch (e) {
+  //       this.logger.warn(`Failed to send setWinner transaction, attempt: ${(i + 1)} / 3:`, e)
+  //       await this.sleep(4000)
+  //     }
+  //   }
+  // }
 }
