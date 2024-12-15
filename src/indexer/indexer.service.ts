@@ -679,6 +679,7 @@ export class IndexerService {
     const callbackTimeout = setTimeout(async () => {
       this.schedulerRegistry.deleteTimeout(schedulerName)
       await this.initiateNewCompetition()
+      // Wait until new competition event will be added to indexer database
       await new Promise(resolve => setTimeout(resolve, 60 * 1000))
       return this.scheduleNextCompetition()
     }, nextCompetitionDate.diff(moment()))
