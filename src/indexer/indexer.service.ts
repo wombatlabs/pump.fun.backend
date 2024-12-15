@@ -632,20 +632,20 @@ export class IndexerService {
     const daysInterval = this.configService.get<number>('COMPETITION_DAYS_INTERVAL')
     const timeZone = 'America/Los_Angeles'
     let nextCompetitionDate: Moment
+    // Competition starts every 7 day at a random time within one hour around midnight
+    // Random is important otherwise they just make a new token 1 second before ending, and pumping it with a lot of ONE
+    const randomMinutesNumber = getRandomNumberFromInterval(1, 60)
 
     const [prevCompetition] = await this.appService.getCompetitions({ limit: 1 })
 
     if(prevCompetition) {
       const { timestampStart, isCompleted } = prevCompetition
 
-      // Competition starts every 7 day at a random time within one hour around midnight
-      // Random is important otherwise they just make a new token 1 second before ending, and pumping it with a lot of ONE
-      const randomMinutesNumber = getRandomNumberFromInterval(1, 60)
       const lastCompetitionDeltaMs = moment().diff(moment(timestampStart * 1000))
-      // Regular interval was expired since the last competition start
-      const isIntervalExpired = lastCompetitionDeltaMs > daysInterval * 24 * 60 * 60 * 1000
+      // Interval was exceeded
+      const isIntervalExceeded = lastCompetitionDeltaMs > daysInterval * 24 * 60 * 60 * 1000
 
-      if(isCompleted || isIntervalExpired) {
+      if(isCompleted || isIntervalExceeded) {
         // Start new competition tomorrow at 00:00
         nextCompetitionDate = moment()
           .tz(timeZone)
@@ -660,25 +660,29 @@ export class IndexerService {
           .startOf('day')
           .add(randomMinutesNumber, 'minutes')
       }
+    } else {
+      this.logger.error(`Previous competition not found in database. New competition will be created.`)
+      // Start new competition tomorrow at 00:00
+      nextCompetitionDate = moment()
+        .tz(timeZone)
+        .add(1, 'days')
+        .startOf('day')
+        .add(randomMinutesNumber, 'minutes')
     }
 
     // nextCompetitionDate = moment().add(30, 'seconds')
 
-    if(nextCompetitionDate) {
-      this.logger.log(`Next competition scheduled at ${
-        nextCompetitionDate.format('YYYY-MM-DD HH:mm:ss')
-      }, ${timeZone} timezone`)
+    this.logger.log(`Next competition scheduled at ${
+      nextCompetitionDate.format('YYYY-MM-DD HH:mm:ss')
+    }, ${timeZone} timezone`)
 
-      const callbackTimeout = setTimeout(async () => {
-        this.schedulerRegistry.deleteTimeout(schedulerName)
-        await this.initiateNewCompetition()
-        await new Promise(resolve => setTimeout(resolve, 60 * 1000))
-        return this.scheduleNextCompetition()
-      }, nextCompetitionDate.diff(moment()))
-      this.schedulerRegistry.addTimeout(schedulerName, callbackTimeout)
-    } else {
-      this.logger.error('Failed to set new competition date')
-    }
+    const callbackTimeout = setTimeout(async () => {
+      this.schedulerRegistry.deleteTimeout(schedulerName)
+      await this.initiateNewCompetition()
+      await new Promise(resolve => setTimeout(resolve, 60 * 1000))
+      return this.scheduleNextCompetition()
+    }, nextCompetitionDate.diff(moment()))
+    this.schedulerRegistry.addTimeout(schedulerName, callbackTimeout)
   }
 
   async initiateNewCompetition() {
