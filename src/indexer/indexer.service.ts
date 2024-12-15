@@ -69,7 +69,7 @@ export class IndexerService {
     this.bootstrap().then(
       () => {
         this.scheduleNextCompetition()
-        // this.eventsTrackingLoop()
+        this.eventsTrackingLoop()
       }
     )
     this.logger.log(`App service started`)
