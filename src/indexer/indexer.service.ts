@@ -22,7 +22,9 @@ import Decimal from "decimal.js";
 import * as moment from "moment-timezone";
 import {Moment} from "moment";
 import {getRandomNumberFromInterval} from "../utils";
-import {SchedulerRegistry} from "@nestjs/schedule";
+import {Cron, CronExpression, SchedulerRegistry} from "@nestjs/schedule";
+
+const CompetitionScheduleCheckJob = 'competition_schedule_check'
 
 @Injectable()
 export class IndexerService {
@@ -68,8 +70,7 @@ export class IndexerService {
     this.logger.log(`Service account address=${account.address}`)
     this.bootstrap().then(
       () => {
-        this.scheduleNextCompetition()
-        this.eventsTrackingLoop()
+        // this.eventsTrackingLoop()
       }
     )
     this.logger.log(`App service started`)
@@ -627,63 +628,73 @@ export class IndexerService {
     return sendTxn.transactionHash.toString()
   }
 
+  @Cron(CronExpression.EVERY_MINUTE, {
+    name: CompetitionScheduleCheckJob
+  })
   async scheduleNextCompetition() {
-    const schedulerName = 'competition_scheduler'
+    const schedulerJob = this.schedulerRegistry.getCronJob(CompetitionScheduleCheckJob)
+    if(schedulerJob) {
+      schedulerJob.stop()
+    }
+
     const daysInterval = this.configService.get<number>('COMPETITION_DAYS_INTERVAL')
     const timeZone = 'America/Los_Angeles'
     let nextCompetitionDate: Moment
     // Competition starts every 7 day at a random time within one hour around midnight
-    // Random is important otherwise they just make a new token 1 second before ending, and pumping it with a lot of ONE
-    const randomMinutesNumber = getRandomNumberFromInterval(1, 60)
 
-    const [prevCompetition] = await this.appService.getCompetitions({ limit: 1 })
+    try {
+      const [prevCompetition] = await this.appService.getCompetitions({ limit: 1 })
+      if(prevCompetition) {
+        const { timestampStart, isCompleted } = prevCompetition
 
-    if(prevCompetition) {
-      const { timestampStart, isCompleted } = prevCompetition
+        const lastCompetitionDeltaMs = moment().diff(moment(timestampStart * 1000))
+        // Interval was exceeded
+        const isIntervalExceeded = lastCompetitionDeltaMs > daysInterval * 24 * 60 * 60 * 1000
 
-      const lastCompetitionDeltaMs = moment().diff(moment(timestampStart * 1000))
-      // Interval was exceeded
-      const isIntervalExceeded = lastCompetitionDeltaMs > daysInterval * 24 * 60 * 60 * 1000
-
-      if(isCompleted || isIntervalExceeded) {
+        if(isCompleted || isIntervalExceeded) {
+          // Start new competition tomorrow at 00:00
+          nextCompetitionDate = moment()
+            .tz(timeZone)
+            .add(1, 'days')
+            .startOf('day')
+        } else {
+          // Start new competition in 7 days at 00:00
+          nextCompetitionDate = moment(timestampStart * 1000)
+            .tz(timeZone)
+            .add(daysInterval, 'days')
+            .startOf('day')
+        }
+      } else {
+        this.logger.error(`Previous competition not found in database. New competition will be created.`)
         // Start new competition tomorrow at 00:00
         nextCompetitionDate = moment()
           .tz(timeZone)
           .add(1, 'days')
           .startOf('day')
-          .add(randomMinutesNumber, 'minutes')
-      } else {
-        // Start new competition in 7 days at 00:00
-        nextCompetitionDate = moment(timestampStart * 1000)
-          .tz(timeZone)
-          .add(daysInterval, 'days')
-          .startOf('day')
-          .add(randomMinutesNumber, 'minutes')
       }
-    } else {
-      this.logger.error(`Previous competition not found in database. New competition will be created.`)
-      // Start new competition tomorrow at 00:00
-      nextCompetitionDate = moment()
-        .tz(timeZone)
-        .add(1, 'days')
-        .startOf('day')
-        .add(randomMinutesNumber, 'minutes')
+
+      // nextCompetitionDate = moment().add(60, 'seconds')
+
+      if(nextCompetitionDate.diff(moment(), 'minutes') < 1) {
+        // Random is important otherwise they just make a new token 1 second before ending, and pumping it with a lot of ONE
+        const randomMinutesNumber = getRandomNumberFromInterval(1, 59)
+        nextCompetitionDate = nextCompetitionDate.add(randomMinutesNumber, 'minutes')
+
+        this.logger.log(`Next competition scheduled at ${
+          nextCompetitionDate.format('YYYY-MM-DD HH:mm:ss')
+        }, ${timeZone} timezone`)
+        await this.sleep(nextCompetitionDate.diff(moment(), 'milliseconds'))
+        await this.initiateNewCompetition()
+      } else {
+        console.log('waiting for date...')
+      }
+    } catch (e) {
+      this.logger.error(`Failed to schedule next competition start:`, e)
+    } finally {
+      if(schedulerJob) {
+        schedulerJob.start()
+      }
     }
-
-    // nextCompetitionDate = moment().add(30, 'seconds')
-
-    this.logger.log(`Next competition scheduled at ${
-      nextCompetitionDate.format('YYYY-MM-DD HH:mm:ss')
-    }, ${timeZone} timezone`)
-
-    const callbackTimeout = setTimeout(async () => {
-      this.schedulerRegistry.deleteTimeout(schedulerName)
-      await this.initiateNewCompetition()
-      // Wait until new competition event will be added to indexer database
-      await new Promise(resolve => setTimeout(resolve, 60 * 1000))
-      return this.scheduleNextCompetition()
-    }, nextCompetitionDate.diff(moment()))
-    this.schedulerRegistry.addTimeout(schedulerName, callbackTimeout)
   }
 
   async initiateNewCompetition() {
