@@ -17,9 +17,14 @@ import {UserService} from "../user/user.service";
 import {DataSource, EntityManager} from "typeorm";
 import * as TokenFactoryABI from "../abi/TokenFactory.json";
 import {AppService} from "../app.service";
-import {ZeroAddress} from "ethers";
+import {parseUnits, ZeroAddress} from "ethers";
 import Decimal from "decimal.js";
-import {Cron, CronExpression} from "@nestjs/schedule";
+import * as moment from "moment-timezone";
+import {Moment} from "moment";
+import {getRandomNumberFromInterval} from "../utils";
+import {Cron, CronExpression, SchedulerRegistry} from "@nestjs/schedule";
+
+const CompetitionScheduleCheckJob = 'competition_schedule_check'
 
 @Injectable()
 export class IndexerService {
@@ -35,6 +40,7 @@ export class IndexerService {
     private userService: UserService,
     private appService: AppService,
     private dataSource: DataSource,
+    private schedulerRegistry: SchedulerRegistry
   ) {
     const rpcUrl = configService.get('RPC_URL')
     const contractAddress = configService.get('TOKEN_FACTORY_ADDRESS')
@@ -622,7 +628,123 @@ export class IndexerService {
     return sendTxn.transactionHash.toString()
   }
 
-  private async startNewCompetition() {
+  @Cron(CronExpression.EVERY_MINUTE, {
+    name: CompetitionScheduleCheckJob
+  })
+  async scheduleNextCompetition() {
+    const schedulerJob = this.schedulerRegistry.getCronJob(CompetitionScheduleCheckJob)
+    if(schedulerJob) {
+      schedulerJob.stop()
+    }
+
+    const daysInterval = this.configService.get<number>('COMPETITION_DAYS_INTERVAL')
+    const timeZone = 'America/Los_Angeles'
+    let nextCompetitionDate: Moment
+    // Competition starts every 7 day at a random time within one hour around midnight
+
+    try {
+      const [prevCompetition] = await this.appService.getCompetitions({ limit: 1 })
+      if(prevCompetition) {
+        const { timestampStart, isCompleted } = prevCompetition
+
+        const lastCompetitionDeltaMs = moment().diff(moment(timestampStart * 1000))
+        // Interval was exceeded
+        const isIntervalExceeded = lastCompetitionDeltaMs > daysInterval * 24 * 60 * 60 * 1000
+
+        if(isCompleted || isIntervalExceeded) {
+          // Start new competition tomorrow at 00:00
+          nextCompetitionDate = moment()
+            .tz(timeZone)
+            .add(1, 'days')
+            .startOf('day')
+        } else {
+          // Start new competition in 7 days at 00:00
+          nextCompetitionDate = moment(timestampStart * 1000)
+            .tz(timeZone)
+            .add(daysInterval, 'days')
+            .startOf('day')
+        }
+      } else {
+        this.logger.error(`Previous competition not found in database. New competition will be created.`)
+        // Start new competition tomorrow at 00:00
+        nextCompetitionDate = moment()
+          .tz(timeZone)
+          .add(1, 'days')
+          .startOf('day')
+      }
+
+      // nextCompetitionDate = moment().add(60, 'seconds')
+
+      if(nextCompetitionDate.diff(moment(), 'minutes') < 1) {
+        // Random is important otherwise they just make a new token 1 second before ending, and pumping it with a lot of ONE
+        const randomMinutesNumber = getRandomNumberFromInterval(1, 59)
+        nextCompetitionDate = nextCompetitionDate.add(randomMinutesNumber, 'minutes')
+
+        this.logger.log(`Next competition scheduled at ${
+          nextCompetitionDate.format('YYYY-MM-DD HH:mm:ss')
+        }, ${timeZone} timezone`)
+        await this.sleep(nextCompetitionDate.diff(moment(), 'milliseconds'))
+        await this.initiateNewCompetition()
+      }
+    } catch (e) {
+      this.logger.error(`Failed to schedule next competition start:`, e)
+    } finally {
+      if(schedulerJob) {
+        schedulerJob.start()
+      }
+    }
+  }
+
+  async initiateNewCompetition() {
+    const attemptsCount = 3
+    const tokenCollateralThreshold = BigInt(parseUnits(
+      this.configService.get<number>('COMPETITION_COLLATERAL_THRESHOLD').toString(), 18
+    ))
+
+    for(let i = 0; i < attemptsCount; i++) {
+      try {
+        let isCollateralThresholdReached = false
+        const competitionId = await this.getCompetitionId()
+        this.logger.log(`Current competition id=${competitionId}`)
+        const tokens = await this.appService.getTokens({
+          competitionId: Number(competitionId),
+          limit: 10000
+        })
+
+        this.logger.log(`Checking tokens (count=${tokens.length}) for minimum collateral=${tokenCollateralThreshold} wei...`)
+        for(const token of tokens) {
+          const collateral = await this.tokenFactoryContract.methods
+            .collateralById(competitionId, token.address)
+            .call() as bigint
+
+          if(collateral >= tokenCollateralThreshold) {
+            isCollateralThresholdReached = true
+            this.logger.log(`Token address=${token} received ${collateral} wei in collateral`)
+            break;
+          }
+        }
+
+        if(isCollateralThresholdReached) {
+          this.logger.log(`Initiate new competition...`)
+          const newCompetitionTxHash = await this.callStartNewCompetitionTx()
+          this.logger.log(`New competition txHash: ${newCompetitionTxHash}`)
+          await this.sleep(5000)
+          const newCompetitionId = await this.getCompetitionId()
+          this.logger.log(`Started new competition id=${newCompetitionId}; calling token winner...`)
+          const setWinnerHash = await this.setWinnerByCompetitionId(competitionId)
+          this.logger.log(`setWinnerByCompetitionId called, txnHash=${setWinnerHash}`)
+        } else {
+          this.logger.log(`No tokens reached minimum collateral=${tokenCollateralThreshold} wei. Waiting for the next iteration.`)
+        }
+        break;
+      } catch (e) {
+        this.logger.warn(`Failed to send setWinner transaction, attempt: ${(i + 1)} / ${attemptsCount}:`, e)
+        await this.sleep(10000)
+      }
+    }
+  }
+
+  private async callStartNewCompetitionTx() {
     const gasFees = await this.tokenFactoryContract.methods
       .startNewCompetition()
       .estimateGas({ from: this.accountAddress });
@@ -651,26 +773,4 @@ export class IndexerService {
       .currentCompetitionId()
       .call() as bigint
   }
-
-  // @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, {
-  //   timeZone: 'America/Los_Angeles'
-  // })
-  // async callSetWinner() {
-  //   for(let i = 0; i < 3; i++) {
-  //     try {
-  //       const currentCompetitionId = await this.getCompetitionId()
-  //       this.logger.log(`Current competition id=${currentCompetitionId}`)
-  //       await this.startNewCompetition()
-  //       await this.sleep(4000)
-  //       const newCompetitionId = await this.getCompetitionId()
-  //       this.logger.log(`Started new competition id=${newCompetitionId}`)
-  //       const setWinnerHash = await this.setWinnerByCompetitionId(currentCompetitionId)
-  //       this.logger.log(`New setWinner is called, txnHash=${setWinnerHash}`)
-  //       break;
-  //     } catch (e) {
-  //       this.logger.warn(`Failed to send setWinner transaction, attempt: ${(i + 1)} / 3:`, e)
-  //       await this.sleep(4000)
-  //     }
-  //   }
-  // }
 }

@@ -38,4 +38,6 @@ export default () => ({
   GOOGLE_CLOUD_CONFIG: getGoogleCloudConfig(),
   SERVICE_PRIVATE_KEY: process.env.SERVICE_PRIVATE_KEY || '',
   ADMIN_API_KEY: process.env.ADMIN_API_KEY || '',
+  COMPETITION_DAYS_INTERVAL: parseInt(process.env.COMPETITION_DAYS_INTERVAL || '7'),
+  COMPETITION_COLLATERAL_THRESHOLD: parseInt(process.env.COMPETITION_COLLATERAL_THRESHOLD || '420000'), // in ONE tokens
 });
