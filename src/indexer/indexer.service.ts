@@ -70,7 +70,7 @@ export class IndexerService {
     this.logger.log(`Service account address=${account.address}`)
     this.bootstrap().then(
       () => {
-        // this.eventsTrackingLoop()
+        this.eventsTrackingLoop()
       }
     )
     this.logger.log(`App service started`)
@@ -685,8 +685,6 @@ export class IndexerService {
         }, ${timeZone} timezone`)
         await this.sleep(nextCompetitionDate.diff(moment(), 'milliseconds'))
         await this.initiateNewCompetition()
-      } else {
-        console.log('waiting for date...')
       }
     } catch (e) {
       this.logger.error(`Failed to schedule next competition start:`, e)
