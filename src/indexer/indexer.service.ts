@@ -308,7 +308,7 @@ export class IndexerService {
     const tokenAddress = (values['token'] as string).toLowerCase()
     const winnerTokenAddress = (values['winnerToken'] as string).toLowerCase()
     const burnedAmount = values['burnedAmount'] as bigint
-    const receivedETH = values['receivedETH'] as bigint
+    const fee = values['fee'] as bigint
     const mintedAmount = values['mintedAmount'] as bigint
     const timestamp = Number(values['timestamp'] as bigint)
 
@@ -339,10 +339,10 @@ export class IndexerService {
       winnerToken,
       timestamp,
       burnedAmount: String(burnedAmount),
-      receivedETH: String(receivedETH),
+      fee: String(fee),
       mintedAmount: String(mintedAmount),
     });
-    this.logger.log(`BurnTokenAndMintWinner: senderAddress=${senderAddress}, tokenAddress=${tokenAddress}, winnerTokenAddress=${winnerTokenAddress}, burnedAmount=${burnedAmount}, receivedETH=${receivedETH}, mintedAmount=${mintedAmount}, txnHash=${txnHash}`);
+    this.logger.log(`BurnTokenAndMintWinner: senderAddress=${senderAddress}, tokenAddress=${tokenAddress}, winnerTokenAddress=${winnerTokenAddress}, burnedAmount=${burnedAmount}, fee=${fee}, mintedAmount=${mintedAmount}, txnHash=${txnHash}`);
   }
 
   private async processWinnerLiquidityEvent(event: EventLog, transactionalEntityManager: EntityManager) {
@@ -354,8 +354,8 @@ export class IndexerService {
     const sender = (values['sender'] as string).toLowerCase()
     const tokenId = String(values['tokenId'] as bigint)
     const liquidity = String(values['liquidity'] as bigint)
-    const amount0 = String(values['amount0'] as bigint)
-    const amount1 = String(values['amount1'] as bigint)
+    const actualTokenAmount = String(values['actualTokenAmount'] as bigint)
+    const actualAssetAmount = String(values['actualAssetAmount'] as bigint)
     const timestamp = Number(values['timestamp'] as bigint)
 
     const token = await this.appService.getTokenByAddress(tokenAddress, transactionalEntityManager)
@@ -380,11 +380,11 @@ export class IndexerService {
       sender,
       tokenId,
       liquidity,
-      amount0,
-      amount1,
+      actualTokenAmount,
+      actualAssetAmount,
       timestamp,
     });
-    this.logger.log(`WinnerLiquidityAdded: tokenAddress=${tokenAddress}, tokenCreator=${tokenCreatorAddress}, pool=${pool}, liquidity=${liquidity}, amount0=${amount0}, timestamp=${timestamp}, amount1=${amount1}, txnHash=${txnHash}`);
+    this.logger.log(`WinnerLiquidityAdded: tokenAddress=${tokenAddress}, tokenCreator=${tokenCreatorAddress}, pool=${pool}, liquidity=${liquidity}, actualTokenAmount=${actualTokenAmount}, actualAssetAmount=${actualAssetAmount}, timestamp=${timestamp}, txnHash=${txnHash}`);
   }
 
   private async processNewCompetitionEvent(event: EventLog, transactionalEntityManager: EntityManager) {
