@@ -42,7 +42,16 @@ export class AppService {
     }
 
     async getTokens(dto: GetTokensDto){
-        const { search, offset, limit, isWinner, sortingField, sortingOrder, competitionId } = dto
+        const {
+            search,
+            offset,
+            limit,
+            isWinner,
+            sortingField,
+            sortingOrder,
+            competitionId,
+            symbol
+        } = dto
         const query = this.dataSource.getRepository(Token)
           .createQueryBuilder('token')
           .leftJoinAndSelect('token.user', 'user')
@@ -57,6 +66,10 @@ export class AppService {
               .orWhere('LOWER(token.address) = LOWER(:address)', { address: search })
               .orWhere('LOWER(token.symbol) LIKE LOWER(:symbol)', { symbol: `%${search}%` })
               .orWhere('LOWER(token.txnHash) = LOWER(:txnHash)', { txnHash: search })
+        }
+
+        if(symbol) {
+            query.where('LOWER(symbol) = LOWER(:symbol)', { symbol })
         }
 
         if(competitionId) {

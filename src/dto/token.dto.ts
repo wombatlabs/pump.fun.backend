@@ -15,6 +15,10 @@ export class GetTokensDto {
   // @IsString()
   search?: string;
 
+  @ApiProperty({ type: String, required: false, default: '' })
+  @IsOptional()
+  symbol?: string;
+
   @ApiProperty({ type: Boolean, required: false })
   isWinner?: boolean;
 
