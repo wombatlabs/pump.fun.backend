@@ -186,9 +186,30 @@ export class AppService {
           .leftJoin('trades.token', 'token')
           .select([
             `DATE_TRUNC('minute', to_timestamp(trades.timestamp)) AS time`,
-            `MAX(trades.price)::text AS "highPrice"`,
-            `MIN(trades.price)::text AS "lowPrice"`,
-            `SUM(trades.amountIn)::text AS volume`
+            `MAX(trades.price)::DOUBLE PRECISION AS "highPrice"`,
+            `MIN(trades.price)::DOUBLE PRECISION AS "lowPrice"`,
+            `SUM(
+                CASE
+                    WHEN trades.type = 'buy'
+                    THEN trades."amountIn"
+                    ELSE trades."amountOut"
+                    END
+                )::DOUBLE PRECISION AS "volume"
+            `,
+            `
+                FIRST_VALUE(trades.price)
+                OVER (
+                    PARTITION BY DATE_TRUNC('minute', to_timestamp(trades.timestamp))
+                    ORDER BY trades.timestamp ASC
+                ) AS "openPrice"
+            `,
+              `
+                LAST_VALUE(trades.price)
+                OVER (
+                    PARTITION BY DATE_TRUNC('minute', to_timestamp(trades.timestamp))
+                    ORDER BY trades.timestamp DESC
+                ) AS "closePrice"
+            `,
           ])
           .where({
               token: {
@@ -196,6 +217,8 @@ export class AppService {
               }
           })
           .groupBy('time')
+          .addGroupBy('trades.price')
+          .addGroupBy('trades.timestamp')
           .orderBy({
               time: 'ASC'
           })
