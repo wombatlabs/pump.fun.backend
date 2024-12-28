@@ -31,4 +31,16 @@ export class GetCandlesDto {
   @Type(() => String)
   @IsString()
   tokenAddress: string;
+
+  @ApiProperty({ type: Number, required: false })
+  @Type(() => String)
+  @IsString()
+  @IsOptional()
+  timestampFrom: number;
+
+  @ApiProperty({ type: Number, required: false })
+  @Type(() => String)
+  @IsString()
+  @IsOptional()
+  timestampTo: number;
 }

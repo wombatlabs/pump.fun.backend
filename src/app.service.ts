@@ -1,5 +1,5 @@
 import {Injectable, Logger} from '@nestjs/common';
-import {DataSource, EntityManager, MoreThan} from "typeorm";
+import {DataSource, EntityManager, LessThan, MoreThan} from "typeorm";
 import {
     Comment,
     CompetitionEntity,
@@ -179,6 +179,8 @@ export class AppService {
     }
 
     async getCandles(dto: GetCandlesDto){
+        const { timestampFrom, timestampTo, tokenAddress } = dto
+
         const query = this.dataSource.getRepository(Trade)
           .createQueryBuilder('trades')
           .leftJoin('trades.token', 'token')
@@ -190,15 +192,27 @@ export class AppService {
           ])
           .where({
               token: {
-                  address: dto.tokenAddress
+                  address: tokenAddress
               }
           })
           .groupBy('time')
           .orderBy({
-              time: 'DESC'
+              time: 'ASC'
           })
           .offset(0)
           .limit(100)
+
+        if(timestampFrom) {
+            query.andWhere({
+                timestamp: MoreThan(timestampFrom)
+            })
+        }
+
+        if(timestampTo) {
+            query.andWhere({
+                timestamp: LessThan(timestampTo)
+            })
+        }
 
         return await query.getRawMany<Candle[]>()
     }
