@@ -34,3 +34,13 @@ export interface ProtocolEvent {
 }
 
 export type ProtocolEventType = 'create_token' | 'buy' | 'sell' | 'set_winner' | 'burn_token_and_set_winner' | 'winner_liquidity' | 'new_competition'
+
+export enum CandleInterval {
+  '1h' = '1h',
+  '1d' = '1d',
+}
+
+export const CandleIntervalPgAlias : Record<CandleInterval, string> = {
+  '1h': 'hour',
+  '1d': 'day',
+}

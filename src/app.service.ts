@@ -14,7 +14,7 @@ import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {GetTokenBalancesDto, GetTokenBurnsDto, GetTokensDto, GetTokenWinnersDto} from "./dto/token.dto";
 import {GetCandlesDto, GetTradesDto} from "./dto/trade.dto";
 import {UserService} from "./user/user.service";
-import {Candle} from "./types";
+import {Candle, CandleIntervalPgAlias} from "./types";
 import {GetWinnerLiquidityProvisionsDto} from "./dto/winner.liquidity.dto";
 import {GetCompetitionsDto} from "./dto/competition.dto";
 
@@ -179,13 +179,15 @@ export class AppService {
     }
 
     async getCandles(dto: GetCandlesDto){
-        const { timestampFrom, timestampTo, tokenAddress } = dto
+        const { timestampFrom, timestampTo, tokenAddress, interval = '1h' } = dto
+
+        const timeInterval = CandleIntervalPgAlias[interval] || 'hour'
 
         const query = this.dataSource.getRepository(Trade)
           .createQueryBuilder('trades')
           .leftJoin('trades.token', 'token')
           .select([
-            `DATE_TRUNC('minute', to_timestamp(trades.timestamp)) AS time`,
+            `DATE_TRUNC('${timeInterval}', to_timestamp(trades.timestamp)) AS time`,
             `MAX(trades.price)::DOUBLE PRECISION AS "highPrice"`,
             `MIN(trades.price)::DOUBLE PRECISION AS "lowPrice"`,
             `SUM(
@@ -196,20 +198,20 @@ export class AppService {
                     END
                 )::DOUBLE PRECISION AS "volume"
             `,
-            `
-                FIRST_VALUE(trades.price)
-                OVER (
-                    PARTITION BY DATE_TRUNC('minute', to_timestamp(trades.timestamp))
-                    ORDER BY trades.timestamp ASC
-                ) AS "openPrice"
-            `,
-              `
-                LAST_VALUE(trades.price)
-                OVER (
-                    PARTITION BY DATE_TRUNC('minute', to_timestamp(trades.timestamp))
-                    ORDER BY trades.timestamp DESC
-                ) AS "closePrice"
-            `,
+            // `
+            //     FIRST_VALUE(trades.price)
+            //     OVER (
+            //         PARTITION BY DATE_TRUNC('${timeInterval}', to_timestamp(trades.timestamp))
+            //         ORDER BY trades.timestamp ASC
+            //     ) AS "openPrice"
+            // `,
+            //   `
+            //     LAST_VALUE(trades.price)
+            //     OVER (
+            //         PARTITION BY DATE_TRUNC('${timeInterval}', to_timestamp(trades.timestamp))
+            //         ORDER BY trades.timestamp DESC
+            //     ) AS "closePrice"
+            // `,
           ])
           .where({
               token: {
@@ -217,8 +219,8 @@ export class AppService {
               }
           })
           .groupBy('time')
-          .addGroupBy('trades.price')
-          .addGroupBy('trades.timestamp')
+          // .addGroupBy('trades.price')
+          // .addGroupBy('trades.timestamp')
           .orderBy({
               time: 'ASC'
           })
