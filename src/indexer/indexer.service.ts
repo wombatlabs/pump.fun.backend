@@ -248,7 +248,6 @@ export class IndexerService {
         token.marketCap = marketCapDecimal.toFixed(10)
 
         await tokenRepository.save(token)
-        this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}, token price: ${token.price}, marketCap=${token.marketCap}`)
       } catch (e) {
         this.logger.error(`Failed to process token holder balance [${type}]: tokenAddress=${tokenAddress}, userAddress=${userAddress}`, e)
         throw new Error(e);
@@ -273,8 +272,12 @@ export class IndexerService {
         token.price = price
         token.marketCap = marketCapDecimal.toFixed(10)
 
+        if(marketCapDecimal.lt(0)) {
+          this.logger.error(`Failed to index block=${blockNumber}: market cap < 0 (${token.marketCap}), token=${tokenAddress}, txnHash=${txnHash}, transactionIndex=${event.transactionIndex}, logIndex=${event.logIndex}`)
+          process.exit(1)
+        }
+
         await tokenRepository.save(token)
-        this.logger.log(`Updated token balance [${type}]: userAddress=${userAddress}, balance=${holder.balance}, token total supply=${token.totalSupply}, token price=${token.price}, , marketCap=${token.marketCap}`)
       } catch (e) {
         this.logger.error(`Failed to process token holder balance [${type}]: tokenAddress=${tokenAddress}, userAddress=${userAddress}`, e)
         throw new Error(e);
@@ -294,7 +297,13 @@ export class IndexerService {
         fee,
         timestamp
       });
-      this.logger.log(`Trade [${type}]: userAddress=${userAddress}, token=${tokenAddress}, amountIn=${amountIn}, amountOut=${amountOut}, fee=${fee}, timestamp=${timestamp}, txnHash=${txnHash}`)
+      this.logger.log(`[${
+        blockNumber
+      }] trade [${
+        type
+      }], userAddress=${
+        userAddress
+      }, token=${tokenAddress}, amountIn=${amountIn}, amountOut=${amountOut}, fee=${fee}, timestamp=${timestamp}, txnHash=${txnHash}, token total supply=${token.totalSupply}, token price: ${token.price}, marketCap=${token.marketCap}, transactionIndex=${event.transactionIndex}, logIndex=${event.logIndex}`)
     } catch (e) {
       this.logger.error(`Failed to process trade [${type}]: userAddress=${userAddress}, token=${tokenAddress} txnHash=${txnHash}`, e)
       throw new Error(e);
@@ -513,16 +522,16 @@ export class IndexerService {
         toBlock = blockchainBlockNumber
       }
 
-      if(toBlock - fromBlock >= 1) {
-        const delta = toBlock - fromBlock
+      const delta = toBlock - fromBlock
+      if(delta >= 1) {
         const numberOfBatches = Math.ceil(delta / this.maxBlocksRange)
 
         const protocolEventsBatch = await Promise.all(
           new Array(numberOfBatches)
             .fill(null)
-            .map(async (_, index, arr) => {
+            .map(async (_, index) => {
               const batchFromBlock = fromBlock + index * this.maxBlocksRange
-              const batchToBlock = Math.min(batchFromBlock + this.maxBlocksRange, toBlock)
+              const batchToBlock = Math.min(batchFromBlock + this.maxBlocksRange - 1, toBlock)
               return await this.getEventsFromBlocksRange(batchFromBlock, batchToBlock)
             })
         )
