@@ -48,4 +48,16 @@ export class GetCandlesDto {
   @ApiProperty({ enum: [CandleInterval['1h'], CandleInterval['1d']], required: false })
   @IsOptional()
   interval?: CandleInterval;
+
+  @ApiProperty({ type: Number, required: false, default: '100' })
+  @Type(() => String)
+  @IsString()
+  @IsOptional()
+  limit: number;
+
+  @ApiProperty({ type: Number, required: false, default: '0' })
+  @Type(() => String)
+  @IsString()
+  @IsOptional()
+  offset: number;
 }

@@ -179,7 +179,14 @@ export class AppService {
     }
 
     async getCandles(dto: GetCandlesDto){
-        const { timestampFrom, timestampTo, tokenAddress, interval = '1h' } = dto
+        const {
+            timestampFrom,
+            timestampTo,
+            tokenAddress,
+            interval = '1h',
+            offset = 0,
+            limit = 100
+        } = dto
 
         const timeInterval = CandleIntervalPgAlias[interval] || 'hour'
 
@@ -196,7 +203,7 @@ export class AppService {
                     THEN trades."amountIn"
                     ELSE trades."amountOut"
                 END
-                )::DOUBLE PRECISION AS "volume"
+                )::text AS "volume"
             `,
             `(array_agg(trades.price ORDER BY trades."timestamp"))[1] AS "openPrice"`,
             `(array_agg(trades.price ORDER BY trades."timestamp" desc))[1] AS "closePrice"`,
@@ -210,8 +217,8 @@ export class AppService {
           .orderBy({
               time: 'ASC'
           })
-          .offset(0)
-          .limit(100)
+          .offset(offset)
+          .limit(limit)
 
         if(timestampFrom) {
             query.andWhere({
