@@ -33,7 +33,7 @@ export class IndexerService {
   private readonly accountAddress: string
   private readonly tokenFactoryContract: Contract<ContractAbi>
   private readonly maxBlocksRange = 1000
-  private readonly maxBlocksBatchSize = 5
+  private readonly maxBlocksBatchSize = 20
 
   constructor(
     private configService: ConfigService,
@@ -273,7 +273,7 @@ export class IndexerService {
         token.marketCap = marketCapDecimal.toFixed(10)
 
         if(marketCapDecimal.lt(0)) {
-          this.logger.error(`Failed to index block=${blockNumber}: market cap < 0 (${token.marketCap}), token=${tokenAddress}, txnHash=${txnHash}, transactionIndex=${event.transactionIndex}, logIndex=${event.logIndex}`)
+          this.logger.error(`Failed to index block=${blockNumber}: market cap < 0 (${marketCapDecimal.toFixed()}), token=${tokenAddress}, txnHash=${txnHash}, transactionIndex=${event.transactionIndex}, logIndex=${event.logIndex}`)
           process.exit(1)
         }
 
@@ -301,9 +301,9 @@ export class IndexerService {
         blockNumber
       }] trade [${
         type
-      }], userAddress=${
+      }] userAddress=${
         userAddress
-      }, token=${tokenAddress}, amountIn=${amountIn}, amountOut=${amountOut}, fee=${fee}, timestamp=${timestamp}, txnHash=${txnHash}, token total supply=${token.totalSupply}, token price: ${token.price}, marketCap=${token.marketCap}, transactionIndex=${event.transactionIndex}, logIndex=${event.logIndex}`)
+      }, token=${tokenAddress}, amountIn=${amountIn}, amountOut=${amountOut}, fee=${fee}, timestamp=${timestamp}, txnHash=${txnHash}, token total supply=${token.totalSupply}, token price=${token.price}, marketCap=${token.marketCap}`)
     } catch (e) {
       this.logger.error(`Failed to process trade [${type}]: userAddress=${userAddress}, token=${tokenAddress} txnHash=${txnHash}`, e)
       throw new Error(e);
