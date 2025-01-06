@@ -195,32 +195,18 @@ export class AppService {
                     WHEN trades.type = 'buy'
                     THEN trades."amountIn"
                     ELSE trades."amountOut"
-                    END
+                END
                 )::DOUBLE PRECISION AS "volume"
             `,
-            // `
-            //     FIRST_VALUE(trades.price)
-            //     OVER (
-            //         PARTITION BY DATE_TRUNC('${timeInterval}', to_timestamp(trades.timestamp))
-            //         ORDER BY trades.timestamp ASC
-            //     ) AS "openPrice"
-            // `,
-            //   `
-            //     LAST_VALUE(trades.price)
-            //     OVER (
-            //         PARTITION BY DATE_TRUNC('${timeInterval}', to_timestamp(trades.timestamp))
-            //         ORDER BY trades.timestamp DESC
-            //     ) AS "closePrice"
-            // `,
+            `(array_agg(trades.price ORDER BY trades."timestamp"))[1] AS "openPrice"`,
+            `(array_agg(trades.price ORDER BY trades."timestamp" desc))[1] AS "closePrice"`,
           ])
           .where({
               token: {
                   address: tokenAddress
               }
           })
-          .groupBy('time')
-          // .addGroupBy('trades.price')
-          // .addGroupBy('trades.timestamp')
+          .groupBy(`time`)
           .orderBy({
               time: 'ASC'
           })
