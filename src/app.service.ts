@@ -81,9 +81,15 @@ export class AppService {
         }
 
         if(sortingField && sortingOrder) {
-            query.orderBy({
-                [`"${sortingField}"`]: sortingOrder
-            })
+            if(sortingField === 'lastComment') {
+                query.leftJoinAndSelect('token.comments', 'comments')
+                // null values (if no comments for the token) goes to the end of the list
+                query.orderBy(`COALESCE(comments.createdAt, '1970-01-01')`, sortingOrder)
+            } else if(sortingField === 'timestamp' || sortingField === 'marketCap') {
+                query.orderBy({
+                    [`"${sortingField}"`]: sortingOrder
+                })
+            }
         } else {
             query.orderBy({
                 timestamp: 'DESC'

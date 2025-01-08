@@ -6,7 +6,9 @@ import {SortOrder} from "../types";
 // List of sortable props from TokenEntity
 enum SortField {
   timestamp = 'timestamp',
-  marketCap = 'marketCap'
+  marketCap = 'marketCap',
+  lastComment = 'lastComment',
+  // lastTrade = 'lastTrade'
 }
 
 export class GetTokensDto {
