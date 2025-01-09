@@ -27,6 +27,8 @@ export class AppService {
     ) {}
 
     async getComments(dto: GetCommentsDto){
+        const { sortingOrder = 'asc' } = dto
+
         return await this.dataSource.manager.find(Comment, {
             where: {
                 token: {
@@ -36,7 +38,7 @@ export class AppService {
             take: +dto.limit,
             skip: +dto.offset,
             order: {
-                createdAt: 'asc'
+                createdAt: sortingOrder
             }
         })
     }
