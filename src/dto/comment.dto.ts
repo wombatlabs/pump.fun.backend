@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {IsString} from 'class-validator';
+import {IsString, MaxLength, MinLength} from 'class-validator';
 import {Transform, Type} from "class-transformer";
+
+const CommentMinLength = 2
 
 export class AddCommentDto {
   @ApiProperty({ type: String, required: true })
@@ -16,8 +18,8 @@ export class AddCommentDto {
   // userAddress: string;
 
   @ApiProperty({ type: String, required: true })
-  @Transform((address) => address.value.trim().toLowerCase())
   @Type(() => String)
+  @MinLength(CommentMinLength, { message: `comment must be at least ${CommentMinLength} characters` })
   @IsString()
   text: string;
 }
