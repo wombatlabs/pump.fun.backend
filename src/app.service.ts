@@ -83,8 +83,10 @@ export class AppService {
         if(sortingField && sortingOrder) {
             if(sortingField === 'lastComment') {
                 query.leftJoinAndSelect('token.comments', 'comments')
-                // null values (if no comments for the token) goes to the end of the list
-                query.orderBy(`COALESCE(comments.createdAt, '1970-01-01')`, sortingOrder)
+                query.orderBy(`comments.createdAt`, sortingOrder, 'NULLS LAST')
+            } else if(sortingField === 'lastTrade') {
+                query.leftJoinAndSelect('token.trades', 'trades')
+                query.orderBy(`trades.timestamp`, sortingOrder, 'NULLS LAST')
             } else if(sortingField === 'timestamp' || sortingField === 'marketCap') {
                 query.orderBy({
                     [`"${sortingField}"`]: sortingOrder

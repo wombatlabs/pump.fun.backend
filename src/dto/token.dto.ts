@@ -8,7 +8,7 @@ enum SortField {
   timestamp = 'timestamp',
   marketCap = 'marketCap',
   lastComment = 'lastComment',
-  // lastTrade = 'lastTrade'
+  lastTrade = 'lastTrade'
 }
 
 export class GetTokensDto {
