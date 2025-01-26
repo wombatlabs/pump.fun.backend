@@ -36,6 +36,10 @@ export class UserAccount {
   trades: Trade[]
 
   @ApiProperty()
+  @Column('bool', { default: true })
+  isEnabled: boolean;
+
+  @ApiProperty()
   @CreateDateColumn({ name: 'createdAt' })
   createdAt: Date;
 
@@ -50,6 +54,9 @@ export class JwtUserAccount {
 
   @ApiProperty()
   username: string;
+
+  @ApiProperty()
+  isEnabled: boolean;
 
   @ApiProperty()
   createdAt: Date;

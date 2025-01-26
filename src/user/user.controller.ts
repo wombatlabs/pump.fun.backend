@@ -21,7 +21,7 @@ import {validationCfg} from "../common/validation.cfg";
 import {SignInRequestDto, VerifySignatureDto} from "../dto/account.dto";
 import {UserService} from "./user.service";
 import {JwtTokenDto, JwtTokensDto} from "../dto/jwt.dto";
-import {instanceToPlain, plainToInstance} from "class-transformer";
+import {plainToInstance} from "class-transformer";
 import {JwtService} from "@nestjs/jwt";
 import {UpdateUserDto} from "../dto/user.dto";
 import {JwtUserAccount} from "../entities/user-account.entity";
@@ -107,6 +107,7 @@ export class UserController {
       const payload: JwtUserAccount = {
         address: user.address,
         username: user.username,
+        isEnabled: user.isEnabled,
         createdAt: user.createdAt
       }
 
@@ -136,6 +137,7 @@ export class UserController {
     const payload: JwtUserAccount = {
       address: user.address,
       username: user.username,
+      isEnabled: user.isEnabled,
       createdAt: user.createdAt
     }
     // Refresh tokens

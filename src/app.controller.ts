@@ -5,6 +5,7 @@ import {
   Get,
   Logger,
   NotFoundException,
+  ForbiddenException,
   Post,
   Query,
   UploadedFile,
@@ -20,7 +21,7 @@ import { ConfigService } from '@nestjs/config';
 import {SkipThrottle} from "@nestjs/throttler";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {AppService} from "./app.service";
-import {GetTokenBalancesDto, GetTokenBurnsDto, GetTokensDto, GetTokenWinnersDto} from "./dto/token.dto";
+import {GetTokenBalancesDto, GetTokenBurnsDto, GetTokensDto} from "./dto/token.dto";
 import {GetCandlesDto, GetTradesDto} from "./dto/trade.dto";
 import {UserService} from "./user/user.service";
 import {FileInterceptor} from "@nestjs/platform-express";
@@ -145,7 +146,12 @@ export class AppController {
     if(!req.user) {
       throw new BadRequestException('InvalidJWT')
     }
-    const { address } = plainToInstance(JwtUserAccount, req.user)
+    const { address, isEnabled } = plainToInstance(JwtUserAccount, req.user)
+
+    if(!isEnabled) {
+      throw new ForbiddenException('User account is disabled')
+    }
+
     const uuid = uuidv4()
     const imageUrl = await this.gCloudService.uploadImage(file, uuid)
     this.logger.log(`Image uploaded, imageUrl=${imageUrl}, userAddress=${address}`)
@@ -159,7 +165,11 @@ export class AppController {
     if(!req.user) {
       throw new BadRequestException('InvalidJWT')
     }
-    const { address } = plainToInstance(JwtUserAccount, req.user)
+    const { address, isEnabled } = plainToInstance(JwtUserAccount, req.user)
+
+    if(!isEnabled) {
+      throw new ForbiddenException('User account is disabled')
+    }
 
     let uuid = ''
     if(!dto.image) {
