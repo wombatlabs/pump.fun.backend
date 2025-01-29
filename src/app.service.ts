@@ -307,6 +307,7 @@ export class AppService {
 
         return await this.dataSource.manager.find(ReportEntity, {
             where: {
+                type: dto.type,
                 userAddress: dto.userAddress,
                 tokenAddress: dto.tokenAddress,
                 reporterUserAddress: dto.reporterUserAddress

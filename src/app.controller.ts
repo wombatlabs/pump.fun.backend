@@ -203,12 +203,7 @@ export class AppController {
       throw new BadRequestException('No type provided')
     }
 
-    const existedReports = await this.appService.getReports({
-      type: dto.type,
-      userAddress: dto.userAddress,
-      tokenAddress: dto.tokenAddress,
-      reporterUserAddress: dto.reporterUserAddress,
-    })
+    const existedReports = await this.appService.getReports(dto)
     if(existedReports.length > 0) {
       throw new BadRequestException('Report already exists')
     }
