@@ -28,7 +28,7 @@ export class ReportEntity {
   @Column({ nullable: true })
   reporterUserAddress: string;
 
-  @ApiProperty()
+  @ApiProperty({ required: false })
   @Column({ nullable: true })
   details: string;
 

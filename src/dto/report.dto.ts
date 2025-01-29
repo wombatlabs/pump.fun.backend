@@ -1,11 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {IsNumber, IsOptional, IsString, Max} from 'class-validator';
+import {IsNumber, IsOptional, IsString, Max, Min} from 'class-validator';
 import {Transform, Type} from "class-transformer";
 
 export class AddReportDto {
   @ApiProperty({ type: Number, required: true })
   @Type(() => Number)
   @IsNumber()
+  @Min(-1)
+  @Max(3)
   type: number;
 
   @ApiProperty({ type: String, required: false })
@@ -28,6 +30,12 @@ export class AddReportDto {
   @IsString()
   @IsOptional()
   reporterUserAddress?: string;
+
+  @ApiProperty({ type: String, required: false })
+  @Type(() => String)
+  @IsString()
+  @IsOptional()
+  details?: string;
 }
 
 export class GetReportsDto {
