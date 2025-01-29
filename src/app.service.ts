@@ -3,7 +3,7 @@ import {DataSource, EntityManager, LessThan, MoreThan} from "typeorm";
 import {
     Comment,
     CompetitionEntity,
-    LiquidityProvision,
+    LiquidityProvision, ReportEntity,
     Token,
     TokenBalance,
     TokenBurn,
@@ -17,6 +17,7 @@ import {UserService} from "./user/user.service";
 import {Candle, CandleIntervalPgAlias} from "./types";
 import {GetWinnerLiquidityProvisionsDto} from "./dto/winner.liquidity.dto";
 import {GetCompetitionsDto} from "./dto/competition.dto";
+import {AddReportDto, GetReportsDto} from "./dto/report.dto";
 
 @Injectable()
 export class AppService {
@@ -290,6 +291,31 @@ export class AppService {
         return await (entityManager || this.dataSource.manager).insert(TokenBalance, {
             token,
             user,
+        })
+    }
+
+    async addReport(dto: AddReportDto): Promise<ReportEntity> {
+        const report = this.dataSource.manager.create(ReportEntity, {
+            ...dto,
+        })
+        await this.dataSource.manager.insert(ReportEntity, report)
+        return report
+    }
+
+    async getReports(dto: GetReportsDto){
+        const { offset = 0, limit = 100 } = dto
+
+        return await this.dataSource.manager.find(ReportEntity, {
+            where: {
+                userAddress: dto.userAddress,
+                tokenAddress: dto.tokenAddress,
+                reporterUserAddress: dto.reporterUserAddress
+            },
+            take: limit,
+            skip: offset,
+            order: {
+                createdAt: 'desc'
+            }
         })
     }
 }

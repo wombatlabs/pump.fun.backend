@@ -8,6 +8,7 @@ import { SignInRequestEntity } from './signin.entity';
 import { TokenBurn } from './token.burn.entity';
 import { LiquidityProvision } from './liquidity.provision.entity';
 import { CompetitionEntity } from './competition.entity';
+import { ReportEntity } from './report.entity';
 
 const entities = [
   UserAccount,
@@ -19,7 +20,8 @@ const entities = [
   SignInRequestEntity,
   TokenBurn,
   LiquidityProvision,
-  CompetitionEntity
+  CompetitionEntity,
+  ReportEntity
 ];
 
 export {
@@ -32,6 +34,7 @@ export {
   SignInRequestEntity,
   TokenBurn,
   LiquidityProvision,
-  CompetitionEntity
+  CompetitionEntity,
+  ReportEntity
 };
 export default entities;

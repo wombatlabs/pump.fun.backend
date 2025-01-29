@@ -2,22 +2,22 @@ import {
   BadRequestException,
   Body,
   Controller,
+  FileTypeValidator,
+  ForbiddenException,
   Get,
   Logger,
+  MaxFileSizeValidator,
   NotFoundException,
-  ForbiddenException,
+  ParseFilePipe,
   Post,
   Query,
-  UploadedFile,
-  UseInterceptors,
-  UseGuards,
   Request,
-  ParseFilePipe,
-  MaxFileSizeValidator,
-  FileTypeValidator
+  UploadedFile,
+  UseGuards,
+  UseInterceptors
 } from '@nestjs/common';
 import {ApiBearerAuth, ApiTags} from '@nestjs/swagger';
-import { ConfigService } from '@nestjs/config';
+import {ConfigService} from '@nestjs/config';
 import {SkipThrottle} from "@nestjs/throttler";
 import {AddCommentDto, GetCommentsDto} from "./dto/comment.dto";
 import {AppService} from "./app.service";
@@ -26,7 +26,7 @@ import {GetCandlesDto, GetTradesDto} from "./dto/trade.dto";
 import {UserService} from "./user/user.service";
 import {FileInterceptor} from "@nestjs/platform-express";
 import {GcloudService} from "./gcloud/gcloud.service";
-import { v4 as uuidv4 } from 'uuid';
+import {v4 as uuidv4} from 'uuid';
 import {AddTokenMetadataDto} from "./dto/metadata.dto";
 import {AuthGuard} from "./common/auth.guard";
 import {plainToInstance} from "class-transformer";
@@ -35,6 +35,7 @@ import {GetWinnerLiquidityProvisionsDto} from "./dto/winner.liquidity.dto";
 import {CacheTTL} from "@nestjs/common/cache";
 import {IndexerService} from "./indexer/indexer.service";
 import {GetCompetitionsDto} from "./dto/competition.dto";
+import {AddReportDto, GetReportsDto} from "./dto/report.dto";
 
 @SkipThrottle()
 @ApiTags('app')
@@ -190,5 +191,34 @@ export class AppController {
     const metadataUrl = await this.gCloudService.uploadMetadata(dto, uuid)
     this.logger.log(`Metadata uploaded, userAddress=${address} url=${metadataUrl}, content: ${JSON.stringify(dto)}`)
     return metadataUrl
+  }
+
+  @Post('/report')
+  async addReport(@Body() dto: AddReportDto) {
+    if(!dto.tokenAddress && !dto.userAddress) {
+      throw new BadRequestException('No token or user address provided')
+    }
+
+    if(!dto.type) {
+      throw new BadRequestException('No type provided')
+    }
+
+    const existedReports = await this.appService.getReports({
+      type: dto.type,
+      userAddress: dto.userAddress,
+      tokenAddress: dto.tokenAddress,
+      reporterUserAddress: dto.reporterUserAddress,
+    })
+    if(existedReports.length > 0) {
+      throw new BadRequestException('Report already exists')
+    }
+
+    return await this.appService.addReport(dto)
+  }
+
+  @CacheTTL(200)
+  @Get('/reports')
+  async getReports(@Query() dto: GetReportsDto) {
+    return await this.appService.getReports(dto)
   }
 }
