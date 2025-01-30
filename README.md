@@ -123,3 +123,14 @@ flyctl secrets set TOKEN_FACTORY_ADDRESS=0xEa5CE8534c4a1462C56Ef82a0a82B7770c0c2
 flyctl deploy --ha=false
 flyctl deploy --ha=false --config fly.staging.toml
 ```
+
+### How to reattach new database to existed app
+```shell
+fly postgres detach pump-fun-backend-staging-db --config fly.staging.toml
+
+fly postgres create 
+
+fly postgres attach pump-fun-backend-staging-db-2 --app pump-fun-backend-staging
+
+flyctl deploy --ha=false --config fly.staging.toml
+```
