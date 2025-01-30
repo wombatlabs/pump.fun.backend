@@ -70,9 +70,17 @@ JWT_PRIVATE_KEY=<PrivateKeyBase64>
 ```
 
 ### Recreate DB on fly.io
+
+#### Stop backend app
 ```shell
 flyctl scale count 0
+flyctl scale count 0 --config fly.staging.toml
+```
 
+####  (Optional) Drop postgres schema
+
+Production:
+```shell
 flyctl postgres connect -a pump-fun-backend-db
 
 \l
@@ -86,14 +94,32 @@ drop database pump_fun_backend;
 create database pump_fun_backend;
 
 \q
-
-Set new env variables if needed:
-flyctl secrets set <secret_name> <secret_value>
-
-flyctl deploy --ha=false
 ```
 
-Updating staging backend:
+Staging:
 ```shell
-flyctl deploy --config fly.staging.toml --ha=false
+flyctl postgres connect -a pump-fun-backend-staging-db
+
+SELECT pg_terminate_backend(pid) 
+FROM pg_stat_activity 
+WHERE pid <> pg_backend_pid() AND datname = 'pump_fun_backend_staging';
+
+drop database pump_fun_backend_staging;
+
+create database pump_fun_backend_staging;
+
+\q
+```
+
+#### (Optional) Set new env variables
+
+```shell
+flyctl secrets set TOKEN_FACTORY_ADDRESS=0xEa5CE8534c4a1462C56Ef82a0a82B7770c0c29ea
+flyctl secrets set TOKEN_FACTORY_ADDRESS=0xEa5CE8534c4a1462C56Ef82a0a82B7770c0c29ea --config fly.staging.toml
+```
+
+#### Deploy backend update
+```shell
+flyctl deploy --ha=false
+flyctl deploy --ha=false --config fly.staging.toml
 ```
