@@ -115,12 +115,16 @@ create database pump_fun_backend_staging;
 
 ```shell
 flyctl secrets set TOKEN_FACTORY_ADDRESS=0xEa5CE8534c4a1462C56Ef82a0a82B7770c0c29ea
-flyctl secrets set TOKEN_FACTORY_ADDRESS=0xEa5CE8534c4a1462C56Ef82a0a82B7770c0c29ea --config fly.staging.toml
+flyctl secrets set INDEXER_INITIAL_BLOCK_NUMBER=66615543
+
+flyctl secrets set TOKEN_FACTORY_ADDRESS=0x3d2f3d9385980A56fCb216571e074C7906Fb50eB --config fly.staging.toml
+flyctl secrets set INDEXER_INITIAL_BLOCK_NUMBER=68799061 --config fly.staging.toml
 ```
 
 #### Deploy backend update
 ```shell
 flyctl deploy --ha=false
+
 flyctl deploy --ha=false --config fly.staging.toml
 ```
 
