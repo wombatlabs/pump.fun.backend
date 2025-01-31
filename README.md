@@ -134,3 +134,13 @@ fly postgres attach pump-fun-backend-staging-db-2 --app pump-fun-backend-staging
 
 flyctl deploy --ha=false --config fly.staging.toml
 ```
+
+### Deployments
+
+#### Staging
+```shell
+Token deployed to: 0xF9b7260506552B998828876eF7dF52D0F5C1F444
+BancorBondingCurve deployed to: 0x574c7282a2A7F458Ee1C01FA568dA6FBc2E35fD7
+NonfungiblePositionManager deployed to: 0xcbD7832E9788C93aeCbB2faE15A99F692F240A46
+TokenFactoryUpgradeable deployed to: 0x3d2f3d9385980A56fCb216571e074C7906Fb50eB
+```

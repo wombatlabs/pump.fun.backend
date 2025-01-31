@@ -171,11 +171,11 @@ export class IndexerService {
         competitionId: 'DESC'
       }
     })
-    if(!competition) {
-      this.logger.error(`Create token: current competition is missing in DB; exit`)
-      process.exit(1)
-    }
-    if(competition.isCompleted) {
+    // if(!competition) {
+    //   this.logger.error(`Create token: current competition is missing in DB; exit`)
+    //   process.exit(1)
+    // }
+    if(competition && competition.isCompleted) {
       this.logger.error(`Create token: current competition is completed, new competitions has not started yet; exit`)
       process.exit(1)
     }
@@ -637,72 +637,72 @@ export class IndexerService {
     return sendTxn.transactionHash.toString()
   }
 
-  @Cron(CronExpression.EVERY_MINUTE, {
-    name: CompetitionScheduleCheckJob
-  })
-  async scheduleNextCompetition() {
-    const schedulerJob = this.schedulerRegistry.getCronJob(CompetitionScheduleCheckJob)
-    if(schedulerJob) {
-      schedulerJob.stop()
-    }
-
-    const daysInterval = this.configService.get<number>('COMPETITION_DAYS_INTERVAL')
-    const timeZone = 'America/Los_Angeles'
-    let nextCompetitionDate: Moment
-    // Competition starts every 7 day at a random time within one hour around midnight
-
-    try {
-      const [prevCompetition] = await this.appService.getCompetitions({ limit: 1 })
-      if(prevCompetition) {
-        const { timestampStart, isCompleted } = prevCompetition
-
-        const lastCompetitionDeltaMs = moment().diff(moment(timestampStart * 1000))
-        // Interval was exceeded
-        const isIntervalExceeded = lastCompetitionDeltaMs > daysInterval * 24 * 60 * 60 * 1000
-
-        if(isCompleted || isIntervalExceeded) {
-          // Start new competition tomorrow at 00:00
-          nextCompetitionDate = moment()
-            .tz(timeZone)
-            .add(1, 'days')
-            .startOf('day')
-        } else {
-          // Start new competition in 7 days at 00:00
-          nextCompetitionDate = moment(timestampStart * 1000)
-            .tz(timeZone)
-            .add(daysInterval, 'days')
-            .startOf('day')
-        }
-      } else {
-        this.logger.error(`Previous competition not found in database. New competition will be created.`)
-        // Start new competition tomorrow at 00:00
-        nextCompetitionDate = moment()
-          .tz(timeZone)
-          .add(1, 'days')
-          .startOf('day')
-      }
-
-      // nextCompetitionDate = moment().add(60, 'seconds')
-
-      if(nextCompetitionDate.diff(moment(), 'minutes') < 1) {
-        // Random is important otherwise they just make a new token 1 second before ending, and pumping it with a lot of ONE
-        const randomMinutesNumber = getRandomNumberFromInterval(1, 59)
-        nextCompetitionDate = nextCompetitionDate.add(randomMinutesNumber, 'minutes')
-
-        this.logger.log(`Next competition scheduled at ${
-          nextCompetitionDate.format('YYYY-MM-DD HH:mm:ss')
-        }, ${timeZone} timezone`)
-        await this.sleep(nextCompetitionDate.diff(moment(), 'milliseconds'))
-        await this.initiateNewCompetition()
-      }
-    } catch (e) {
-      this.logger.error(`Failed to schedule next competition start:`, e)
-    } finally {
-      if(schedulerJob) {
-        schedulerJob.start()
-      }
-    }
-  }
+  // @Cron(CronExpression.EVERY_MINUTE, {
+  //   name: CompetitionScheduleCheckJob
+  // })
+  // async scheduleNextCompetition() {
+  //   const schedulerJob = this.schedulerRegistry.getCronJob(CompetitionScheduleCheckJob)
+  //   if(schedulerJob) {
+  //     schedulerJob.stop()
+  //   }
+  //
+  //   const daysInterval = this.configService.get<number>('COMPETITION_DAYS_INTERVAL')
+  //   const timeZone = 'America/Los_Angeles'
+  //   let nextCompetitionDate: Moment
+  //   // Competition starts every 7 day at a random time within one hour around midnight
+  //
+  //   try {
+  //     const [prevCompetition] = await this.appService.getCompetitions({ limit: 1 })
+  //     if(prevCompetition) {
+  //       const { timestampStart, isCompleted } = prevCompetition
+  //
+  //       const lastCompetitionDeltaMs = moment().diff(moment(timestampStart * 1000))
+  //       // Interval was exceeded
+  //       const isIntervalExceeded = lastCompetitionDeltaMs > daysInterval * 24 * 60 * 60 * 1000
+  //
+  //       if(isCompleted || isIntervalExceeded) {
+  //         // Start new competition tomorrow at 00:00
+  //         nextCompetitionDate = moment()
+  //           .tz(timeZone)
+  //           .add(1, 'days')
+  //           .startOf('day')
+  //       } else {
+  //         // Start new competition in 7 days at 00:00
+  //         nextCompetitionDate = moment(timestampStart * 1000)
+  //           .tz(timeZone)
+  //           .add(daysInterval, 'days')
+  //           .startOf('day')
+  //       }
+  //     } else {
+  //       this.logger.error(`Previous competition not found in database. New competition will be created.`)
+  //       // Start new competition tomorrow at 00:00
+  //       nextCompetitionDate = moment()
+  //         .tz(timeZone)
+  //         .add(1, 'days')
+  //         .startOf('day')
+  //     }
+  //
+  //     // nextCompetitionDate = moment().add(60, 'seconds')
+  //
+  //     if(nextCompetitionDate.diff(moment(), 'minutes') < 1) {
+  //       // Random is important otherwise they just make a new token 1 second before ending, and pumping it with a lot of ONE
+  //       const randomMinutesNumber = getRandomNumberFromInterval(1, 59)
+  //       nextCompetitionDate = nextCompetitionDate.add(randomMinutesNumber, 'minutes')
+  //
+  //       this.logger.log(`Next competition scheduled at ${
+  //         nextCompetitionDate.format('YYYY-MM-DD HH:mm:ss')
+  //       }, ${timeZone} timezone`)
+  //       await this.sleep(nextCompetitionDate.diff(moment(), 'milliseconds'))
+  //       await this.initiateNewCompetition()
+  //     }
+  //   } catch (e) {
+  //     this.logger.error(`Failed to schedule next competition start:`, e)
+  //   } finally {
+  //     if(schedulerJob) {
+  //       schedulerJob.start()
+  //     }
+  //   }
+  // }
 
   async initiateNewCompetition() {
     const attemptsCount = 3
