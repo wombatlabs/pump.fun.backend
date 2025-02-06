@@ -1,6 +1,6 @@
 import {Injectable, Logger} from '@nestjs/common';
 import {Contract, ContractAbi, EventLog, Web3} from "web3";
-import {TokenMetadata, TradeType} from "../types";
+import {TokenFactoryConfig, TokenMetadata, TradeType} from "../types";
 import axios from "axios";
 import * as process from "process";
 import {
@@ -19,19 +19,13 @@ import * as TokenFactoryABI from "../abi/TokenFactory.json";
 import {AppService} from "../app.service";
 import {parseUnits, ZeroAddress} from "ethers";
 import Decimal from "decimal.js";
-import * as moment from "moment-timezone";
-import {Moment} from "moment";
-import {getRandomNumberFromInterval} from "../utils";
-import {Cron, CronExpression, SchedulerRegistry} from "@nestjs/schedule";
-
-const CompetitionScheduleCheckJob = 'competition_schedule_check'
+import {SchedulerRegistry} from "@nestjs/schedule";
 
 @Injectable()
 export class IndexerService {
   private readonly logger = new Logger(IndexerService.name);
   private readonly web3: Web3
   private readonly accountAddress: string
-  private readonly tokenFactoryContract: Contract<ContractAbi>
   private readonly maxBlocksRange = 1000
   private readonly maxBlocksBatchSize = 20
 
@@ -43,11 +37,11 @@ export class IndexerService {
     private schedulerRegistry: SchedulerRegistry
   ) {
     const rpcUrl = configService.get('RPC_URL')
-    const contractAddress = configService.get('TOKEN_FACTORY_ADDRESS')
+    const tokenFactoryParams = configService.get('TOKEN_FACTORY')
     const privateKey = configService.get('SERVICE_PRIVATE_KEY')
 
-    if(!contractAddress) {
-      this.logger.error(`[TOKEN_FACTORY_ADDRESS] is missing but required, exit`)
+    if(!tokenFactoryParams) {
+      this.logger.error(`[TOKEN_FACTORY] is missing but required, exit`)
       process.exit(1)
     }
 
@@ -58,40 +52,61 @@ export class IndexerService {
 
     this.logger.log(`Starting app service, RPC_URL=${
       rpcUrl
-    }, TOKEN_FACTORY_ADDRESS=${
-      contractAddress
+    }, TOKEN_FACTORY=${
+      tokenFactoryParams
     }`)
 
     this.web3 = new Web3(rpcUrl);
     const account = this.web3.eth.accounts.privateKeyToAccount(privateKey)
     this.accountAddress = account.address
     this.web3.eth.accounts.wallet.add(account);
-    this.tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, contractAddress);
     this.logger.log(`Service account address=${account.address}`)
     this.bootstrap().then(
-      () => {
-        this.eventsTrackingLoop()
+      (tokenFactories) => {
+        tokenFactories.forEach(factory => {
+          this.eventsTrackingLoop(factory)
+        })
       }
     )
     this.logger.log(`App service started`)
   }
 
+  private getTokenFactories(): TokenFactoryConfig[] {
+    const values = this.configService.get<string>('TOKEN_FACTORY')
+    const factoryConfigs = values.split(';')
+    return factoryConfigs.map(item => {
+      const [address, blockNumber] = item.split(',')
+      return {
+        address,
+        blockNumber: Number(blockNumber)
+      }
+    })
+  }
+
   private async bootstrap() {
     try {
-      const indexerState = await this.dataSource.manager.findOne(IndexerState, {
-        where: {}
-      })
-      if(!indexerState) {
-        const blockNumber = +this.configService.get<number>('INDEXER_INITIAL_BLOCK_NUMBER')
-        if(!blockNumber) {
-          this.logger.error('[INDEXER_INITIAL_BLOCK_NUMBER] is empty but required, exit')
-          process.exit(1)
-        }
-        await this.dataSource.manager.insert(IndexerState, {
-          blockNumber
+      const tokenFactories = this.getTokenFactories()
+
+      for(const tokenFactory of tokenFactories) {
+        const { address, blockNumber } = tokenFactory
+        const indexerState = await this.dataSource.manager.findOne(IndexerState, {
+          where: {
+            name: address
+          }
         })
-        this.logger.log(`Set initial blockNumber=${blockNumber}`)
+
+        if(!indexerState) {
+          await this.dataSource.manager.insert(IndexerState, {
+            name: address,
+            blockNumber
+          })
+          this.logger.log(`Bootstrap: created new tokenFactory=${address}, blockNumber=${blockNumber}`)
+        } else {
+          this.logger.log(`Bootstrap: existed tokenFactory=${indexerState.name}, blockNumber=${indexerState.blockNumber}`)
+        }
       }
+
+      return tokenFactories
     } catch (e) {
       this.logger.error(`Failed to bootstrap, exit`, e)
       process.exit(1)
@@ -430,26 +445,41 @@ export class IndexerService {
     this.logger.log(`NewCompetitionStarted: competitionId=${competitionId}, timestamp=${timestamp}, txnHash=${txnHash}`);
   }
 
-  public async getLatestIndexedBlockNumber() {
+  public async getLatestIndexedBlockNumber(indexerName: string) {
     const indexerState = await this.dataSource.manager.findOne(IndexerState, {
-      where: {},
+      where: {
+        name: indexerName
+      },
     })
+
     if(indexerState) {
       return indexerState.blockNumber
     }
     return 0
   }
 
-  private async updateLastIndexerBlockNumber(blockNumber: number) {
+  private async updateLastIndexerBlockNumber(indexerName: string, blockNumber: number) {
     const stateRepository = this.dataSource.manager.getRepository(IndexerState)
     const indexerState = await stateRepository.findOne({
-      where: {}
+      where: {
+        name: indexerName
+      }
     })
+
+    if(!indexerState) {
+      throw new Error('Indexer state not found: ' + indexerName)
+    }
+
     indexerState.blockNumber = blockNumber
     await stateRepository.save(indexerState)
   }
 
-  async getEventsFromBlocksRange(fromBlock: number, toBlock: number) {
+  async getEventsFromBlocksRange(
+    tokenFactory: TokenFactoryConfig,
+    fromBlock: number,
+    toBlock: number
+  ) {
+    const tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, tokenFactory.address);
     const [
       newCompetitionEvents,
       setWinnerEvents,
@@ -459,37 +489,37 @@ export class IndexerService {
       sellEvents,
       burnAndSetWinnerEvents
     ] = await Promise.all([
-      this.tokenFactoryContract.getPastEvents('allEvents', {
+      tokenFactoryContract.getPastEvents('allEvents', {
         fromBlock, toBlock, topics: [ this.web3.utils.sha3('NewCompetitionStarted(uint256,uint256)')],
       }),
-      this.tokenFactoryContract.getPastEvents('allEvents', {
+      tokenFactoryContract.getPastEvents('allEvents', {
         fromBlock, toBlock, topics: [ this.web3.utils.sha3('SetWinner(address,uint256,uint256)')],
       }),
-      this.tokenFactoryContract.getPastEvents('allEvents', {
+      tokenFactoryContract.getPastEvents('allEvents', {
         fromBlock, toBlock, topics: [ this.web3.utils.sha3('WinnerLiquidityAdded(address,address,address,address,uint256,uint128,uint256,uint256,uint256)')],
       }),
-      this.tokenFactoryContract.getPastEvents('allEvents', {
+      tokenFactoryContract.getPastEvents('allEvents', {
         fromBlock,
         toBlock,
         topics: [
           this.web3.utils.sha3('TokenCreated(address,string,string,string,address,uint256,uint256)'),
         ],
       }),
-      this.tokenFactoryContract.getPastEvents('allEvents', {
+      tokenFactoryContract.getPastEvents('allEvents', {
         fromBlock,
         toBlock,
         topics: [
           this.web3.utils.sha3('TokenBuy(address,uint256,uint256,uint256,uint256)'),
         ],
       }),
-      this.tokenFactoryContract.getPastEvents('allEvents', {
+      tokenFactoryContract.getPastEvents('allEvents', {
         fromBlock,
         toBlock,
         topics: [
           this.web3.utils.sha3('TokenSell(address,uint256,uint256,uint256,uint256)'),
         ],
       }),
-      this.tokenFactoryContract.getPastEvents('allEvents', {
+      tokenFactoryContract.getPastEvents('allEvents', {
         fromBlock,
         toBlock,
         topics: [
@@ -508,8 +538,8 @@ export class IndexerService {
       .concat(...newCompetitionEvents.map(data => ({ type: 'new_competition', data })))
   }
 
-  async eventsTrackingLoop() {
-    const lastIndexedBlockNumber = await this.getLatestIndexedBlockNumber()
+  async eventsTrackingLoop(tokenFactory: TokenFactoryConfig) {
+    const lastIndexedBlockNumber = await this.getLatestIndexedBlockNumber(tokenFactory.address)
     const fromBlockParam = lastIndexedBlockNumber + 1
 
     let fromBlock = fromBlockParam
@@ -532,7 +562,7 @@ export class IndexerService {
             .map(async (_, index) => {
               const batchFromBlock = fromBlock + index * this.maxBlocksRange
               const batchToBlock = Math.min(batchFromBlock + this.maxBlocksRange - 1, toBlock)
-              return await this.getEventsFromBlocksRange(batchFromBlock, batchToBlock)
+              return await this.getEventsFromBlocksRange(tokenFactory, batchFromBlock, batchToBlock)
             })
         )
 
@@ -582,7 +612,7 @@ export class IndexerService {
           }
         })
 
-        this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), events count=${protocolEvents.length}`)
+        this.logger.log(`[${tokenFactory.address}] [${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), events count=${protocolEvents.length}`)
       } else {
         // Wait for blockchain
         toBlock = fromBlockParam - 1
@@ -590,52 +620,52 @@ export class IndexerService {
       }
     } catch (e) {
       toBlock = fromBlockParam - 1
-      this.logger.error(`[${fromBlock} - ${toBlock}] Failed to index blocks range:`, e)
+      this.logger.error(`[${tokenFactory.address}] [${fromBlock} - ${toBlock}] Failed to index blocks range:`, e)
       await new Promise(resolve => setTimeout(resolve, 30 * 1000));
     }
 
     try {
-      await this.updateLastIndexerBlockNumber(toBlock)
+      await this.updateLastIndexerBlockNumber(tokenFactory.address, toBlock)
     } catch (e) {
       this.logger.error(`Failed to update last blockNumber=${toBlock}, exit`, e)
       process.exit(1)
     }
 
-    return this.eventsTrackingLoop()
+    return this.eventsTrackingLoop(tokenFactory)
   }
 
   private sleep(timeout: number) {
     return new Promise(resolve => setTimeout(resolve, timeout));
   }
 
-  private async setWinnerByCompetitionId(prevCompetitionId: bigint) {
-    const gasFees = await this.tokenFactoryContract.methods
-      .setWinnerByCompetitionId(prevCompetitionId)
-      .estimateGas({
-        from: this.accountAddress
-      });
-
-    const gasPrice = await this.web3.eth.getGasPrice();
-
-    const tx = {
-      from: this.accountAddress,
-      to: this.configService.get('TOKEN_FACTORY_ADDRESS'),
-      gas: gasFees,
-      gasPrice,
-      data: this.tokenFactoryContract.methods
-        .setWinnerByCompetitionId(prevCompetitionId)
-        .encodeABI(),
-    };
-
-    const signPromise = await this.web3.eth.accounts.signTransaction(
-      tx,
-      this.configService.get('SERVICE_PRIVATE_KEY')
-    );
-
-    const sendTxn = await this.web3.eth.sendSignedTransaction(signPromise.rawTransaction,);
-
-    return sendTxn.transactionHash.toString()
-  }
+  // private async setWinnerByCompetitionId(prevCompetitionId: bigint) {
+  //   const gasFees = await this.tokenFactoryContract.methods
+  //     .setWinnerByCompetitionId(prevCompetitionId)
+  //     .estimateGas({
+  //       from: this.accountAddress
+  //     });
+  //
+  //   const gasPrice = await this.web3.eth.getGasPrice();
+  //
+  //   const tx = {
+  //     from: this.accountAddress,
+  //     to: this.configService.get('TOKEN_FACTORY_ADDRESS'),
+  //     gas: gasFees,
+  //     gasPrice,
+  //     data: this.tokenFactoryContract.methods
+  //       .setWinnerByCompetitionId(prevCompetitionId)
+  //       .encodeABI(),
+  //   };
+  //
+  //   const signPromise = await this.web3.eth.accounts.signTransaction(
+  //     tx,
+  //     this.configService.get('SERVICE_PRIVATE_KEY')
+  //   );
+  //
+  //   const sendTxn = await this.web3.eth.sendSignedTransaction(signPromise.rawTransaction,);
+  //
+  //   return sendTxn.transactionHash.toString()
+  // }
 
   // @Cron(CronExpression.EVERY_MINUTE, {
   //   name: CompetitionScheduleCheckJob
@@ -704,82 +734,82 @@ export class IndexerService {
   //   }
   // }
 
-  async initiateNewCompetition() {
-    const attemptsCount = 3
-    const tokenCollateralThreshold = BigInt(parseUnits(
-      this.configService.get<number>('COMPETITION_COLLATERAL_THRESHOLD').toString(), 18
-    ))
+  // async initiateNewCompetition() {
+  //   const attemptsCount = 3
+  //   const tokenCollateralThreshold = BigInt(parseUnits(
+  //     this.configService.get<number>('COMPETITION_COLLATERAL_THRESHOLD').toString(), 18
+  //   ))
+  //
+  //   for(let i = 0; i < attemptsCount; i++) {
+  //     try {
+  //       let isCollateralThresholdReached = false
+  //       const competitionId = await this.getCompetitionId()
+  //       this.logger.log(`Current competition id=${competitionId}`)
+  //       const tokens = await this.appService.getTokens({
+  //         competitionId: Number(competitionId),
+  //         limit: 10000
+  //       })
+  //
+  //       this.logger.log(`Checking tokens (count=${tokens.length}) for minimum collateral=${tokenCollateralThreshold} wei...`)
+  //       for(const token of tokens) {
+  //         const collateral = await this.tokenFactoryContract.methods
+  //           .collateralById(competitionId, token.address)
+  //           .call() as bigint
+  //
+  //         if(collateral >= tokenCollateralThreshold) {
+  //           isCollateralThresholdReached = true
+  //           this.logger.log(`Token address=${token} received ${collateral} wei in collateral`)
+  //           break;
+  //         }
+  //       }
+  //
+  //       if(isCollateralThresholdReached) {
+  //         this.logger.log(`Initiate new competition...`)
+  //         const newCompetitionTxHash = await this.callStartNewCompetitionTx()
+  //         this.logger.log(`New competition txHash: ${newCompetitionTxHash}`)
+  //         await this.sleep(5000)
+  //         const newCompetitionId = await this.getCompetitionId()
+  //         this.logger.log(`Started new competition id=${newCompetitionId}; calling token winner...`)
+  //         const setWinnerHash = await this.setWinnerByCompetitionId(competitionId)
+  //         this.logger.log(`setWinnerByCompetitionId called, txnHash=${setWinnerHash}`)
+  //       } else {
+  //         this.logger.log(`No tokens reached minimum collateral=${tokenCollateralThreshold} wei. Waiting for the next iteration.`)
+  //       }
+  //       break;
+  //     } catch (e) {
+  //       this.logger.warn(`Failed to send setWinner transaction, attempt: ${(i + 1)} / ${attemptsCount}:`, e)
+  //       await this.sleep(10000)
+  //     }
+  //   }
+  // }
 
-    for(let i = 0; i < attemptsCount; i++) {
-      try {
-        let isCollateralThresholdReached = false
-        const competitionId = await this.getCompetitionId()
-        this.logger.log(`Current competition id=${competitionId}`)
-        const tokens = await this.appService.getTokens({
-          competitionId: Number(competitionId),
-          limit: 10000
-        })
+  // private async callStartNewCompetitionTx() {
+  //   const gasFees = await this.tokenFactoryContract.methods
+  //     .startNewCompetition()
+  //     .estimateGas({ from: this.accountAddress });
+  //
+  //   const gasPrice = await this.web3.eth.getGasPrice();
+  //
+  //   const tx = {
+  //     from: this.accountAddress,
+  //     to: this.configService.get('TOKEN_FACTORY_ADDRESS'),
+  //     gas: gasFees,
+  //     gasPrice,
+  //     data: this.tokenFactoryContract.methods.startNewCompetition().encodeABI(),
+  //   };
+  //
+  //   const signPromise = await this.web3.eth.accounts.signTransaction(tx, this.configService.get('SERVICE_PRIVATE_KEY'));
+  //
+  //   const sendTxn = await this.web3.eth.sendSignedTransaction(
+  //     signPromise.rawTransaction,
+  //   );
+  //
+  //   return sendTxn.transactionHash.toString()
+  // }
 
-        this.logger.log(`Checking tokens (count=${tokens.length}) for minimum collateral=${tokenCollateralThreshold} wei...`)
-        for(const token of tokens) {
-          const collateral = await this.tokenFactoryContract.methods
-            .collateralById(competitionId, token.address)
-            .call() as bigint
-
-          if(collateral >= tokenCollateralThreshold) {
-            isCollateralThresholdReached = true
-            this.logger.log(`Token address=${token} received ${collateral} wei in collateral`)
-            break;
-          }
-        }
-
-        if(isCollateralThresholdReached) {
-          this.logger.log(`Initiate new competition...`)
-          const newCompetitionTxHash = await this.callStartNewCompetitionTx()
-          this.logger.log(`New competition txHash: ${newCompetitionTxHash}`)
-          await this.sleep(5000)
-          const newCompetitionId = await this.getCompetitionId()
-          this.logger.log(`Started new competition id=${newCompetitionId}; calling token winner...`)
-          const setWinnerHash = await this.setWinnerByCompetitionId(competitionId)
-          this.logger.log(`setWinnerByCompetitionId called, txnHash=${setWinnerHash}`)
-        } else {
-          this.logger.log(`No tokens reached minimum collateral=${tokenCollateralThreshold} wei. Waiting for the next iteration.`)
-        }
-        break;
-      } catch (e) {
-        this.logger.warn(`Failed to send setWinner transaction, attempt: ${(i + 1)} / ${attemptsCount}:`, e)
-        await this.sleep(10000)
-      }
-    }
-  }
-
-  private async callStartNewCompetitionTx() {
-    const gasFees = await this.tokenFactoryContract.methods
-      .startNewCompetition()
-      .estimateGas({ from: this.accountAddress });
-
-    const gasPrice = await this.web3.eth.getGasPrice();
-
-    const tx = {
-      from: this.accountAddress,
-      to: this.configService.get('TOKEN_FACTORY_ADDRESS'),
-      gas: gasFees,
-      gasPrice,
-      data: this.tokenFactoryContract.methods.startNewCompetition().encodeABI(),
-    };
-
-    const signPromise = await this.web3.eth.accounts.signTransaction(tx, this.configService.get('SERVICE_PRIVATE_KEY'));
-
-    const sendTxn = await this.web3.eth.sendSignedTransaction(
-      signPromise.rawTransaction,
-    );
-
-    return sendTxn.transactionHash.toString()
-  }
-
-  private async getCompetitionId () {
-    return await this.tokenFactoryContract.methods
-      .currentCompetitionId()
-      .call() as bigint
-  }
+  // private async getCompetitionId () {
+  //   return await this.tokenFactoryContract.methods
+  //     .currentCompetitionId()
+  //     .call() as bigint
+  // }
 }

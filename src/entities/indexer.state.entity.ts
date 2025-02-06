@@ -1,14 +1,15 @@
 import {
   Column,
-  Entity, PrimaryGeneratedColumn,
+  Entity,
+  PrimaryColumn,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 
 @Entity({ name: 'indexer_state' })
 export class IndexerState {
   @ApiProperty()
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryColumn({ type: 'varchar', unique: true })
+  name: string;
 
   @ApiProperty()
   @Column({ type: 'integer' })

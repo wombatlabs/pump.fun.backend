@@ -21,9 +21,9 @@ const config: DataSourceOptions = {
     },
   entities: ['dist/**/*.entity{.ts,.js}'],
   migrations: ['dist/migrations/*{.ts,.js}'],
-  synchronize: false,
+  synchronize: true,
   migrationsTableName: 'migrations',
-  migrationsRun: true,
+  // migrationsRun: true,
 };
 
 export default new DataSource(config);

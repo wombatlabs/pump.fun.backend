@@ -54,13 +54,13 @@ export class AppController {
     return this.configService.get('version');
   }
 
-  @Get('/status')
-  async getStatus() {
-    const latestIndexedBlock = await this.indexerService.getLatestIndexedBlockNumber();
-    return {
-      latestIndexedBlock,
-    }
-  }
+  // @Get('/status')
+  // async getStatus() {
+  //   const latestIndexedBlock = await this.indexerService.getLatestIndexedBlockNumber();
+  //   return {
+  //     latestIndexedBlock,
+  //   }
+  // }
 
   @CacheTTL(200)
   @Get('/tokens')

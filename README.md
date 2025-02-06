@@ -147,4 +147,9 @@ Token deployed to: 0xF9b7260506552B998828876eF7dF52D0F5C1F444
 BancorBondingCurve deployed to: 0x574c7282a2A7F458Ee1C01FA568dA6FBc2E35fD7
 NonfungiblePositionManager deployed to: 0xcbD7832E9788C93aeCbB2faE15A99F692F240A46
 TokenFactoryUpgradeable deployed to: 0x3d2f3d9385980A56fCb216571e074C7906Fb50eB
+
+Token deployed to: 0xBb3Ee828947Be4736ed5AA572F1F37007C4F07E8
+BancorBondingCurve deployed to: 0xaEeDf7830c74274B318EC2Db041Da9b9d95c2cC5
+NonfungiblePositionManager deployed to: 0xC0Ce91907EbA2F937062D05A5bfe8FcE51967478
+TokenFactoryUpgradeable deployed to: 0xE12aC751317eb2e78f83acB212415C9c1116C73A
 ```

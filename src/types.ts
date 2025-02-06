@@ -46,3 +46,8 @@ export const CandleIntervalPgAlias : Record<CandleInterval, string> = {
   '1h': 'hour',
   '1d': 'day',
 }
+
+export interface TokenFactoryConfig {
+  address: string
+  blockNumber: number
+}
