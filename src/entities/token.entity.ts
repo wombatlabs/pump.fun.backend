@@ -40,6 +40,10 @@ export class Token {
   blockNumber: number;
 
   @ApiProperty()
+  @Column()
+  tokenFactoryAddress: string;
+
+  @ApiProperty()
   @Column({ unique: true })
   address: string;
 

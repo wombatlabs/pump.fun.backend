@@ -63,9 +63,7 @@ export class IndexerService {
     this.logger.log(`Service account address=${account.address}`)
     this.bootstrap().then(
       (tokenFactories) => {
-        tokenFactories.forEach(factory => {
-          this.eventsTrackingLoop(factory)
-        })
+        this.eventsTrackingLoop(tokenFactories)
       }
     )
     this.logger.log(`App service started`)
@@ -151,6 +149,7 @@ export class IndexerService {
   }
 
   private async processCreateTokenEvent(event: EventLog, transactionalEntityManager: EntityManager) {
+    const tokenFactoryAddress = event.address.toLowerCase()
     const txnHash = event.transactionHash.toLowerCase()
     const values = event.returnValues
     const tokenAddress = (values['token'] as string).toLowerCase()
@@ -199,6 +198,7 @@ export class IndexerService {
       txnHash,
       address: tokenAddress,
       blockNumber: Number(event.blockNumber),
+      tokenFactoryAddress,
       name,
       symbol,
       timestamp,
@@ -538,100 +538,102 @@ export class IndexerService {
       .concat(...newCompetitionEvents.map(data => ({ type: 'new_competition', data })))
   }
 
-  async eventsTrackingLoop(tokenFactory: TokenFactoryConfig) {
-    const lastIndexedBlockNumber = await this.getLatestIndexedBlockNumber(tokenFactory.address)
-    const fromBlockParam = lastIndexedBlockNumber + 1
+  async eventsTrackingLoop(tokenFactories: TokenFactoryConfig[]) {
+    await this.dataSource.manager.transaction(async (transactionalEntityManager) => {
+      for(const tokenFactory of tokenFactories) {
+        const lastIndexedBlockNumber = await this.getLatestIndexedBlockNumber(tokenFactory.address)
+        const fromBlockParam = lastIndexedBlockNumber + 1
 
-    let fromBlock = fromBlockParam
-    let toBlock = fromBlock
+        let fromBlock = fromBlockParam
+        let toBlock = fromBlock
 
-    try {
-      const blockchainBlockNumber = +(String(await this.web3.eth.getBlockNumber()))
-      toBlock = fromBlock + this.maxBlocksRange * this.maxBlocksBatchSize - 1
-      if(toBlock > blockchainBlockNumber) {
-        toBlock = blockchainBlockNumber
-      }
-
-      const delta = toBlock - fromBlock
-      if(delta >= 1) {
-        const numberOfBatches = Math.ceil(delta / this.maxBlocksRange)
-
-        const protocolEventsBatch = await Promise.all(
-          new Array(numberOfBatches)
-            .fill(null)
-            .map(async (_, index) => {
-              const batchFromBlock = fromBlock + index * this.maxBlocksRange
-              const batchToBlock = Math.min(batchFromBlock + this.maxBlocksRange - 1, toBlock)
-              return await this.getEventsFromBlocksRange(tokenFactory, batchFromBlock, batchToBlock)
-            })
-        )
-
-        const protocolEvents = protocolEventsBatch
-          .flat()
-          .sort((a, b) => {
-            const blockNumberDiff = Number(a.data.blockNumber) - Number(b.data.blockNumber)
-            if(blockNumberDiff !== 0) {
-              return blockNumberDiff
-            }
-            return Number(a.data.transactionIndex) - Number(b.data.transactionIndex)
-          })
-
-        await this.dataSource.manager.transaction(async (transactionalEntityManager) => {
-          for(const protocolEvent of protocolEvents) {
-            const { type, data } = protocolEvent
-            switch (type) {
-              case 'create_token': {
-                await this.processCreateTokenEvent(data, transactionalEntityManager)
-                break;
-              }
-              case 'buy': {
-                await this.processTradeEvent(TradeType.buy, data, transactionalEntityManager)
-                break;
-              }
-              case 'sell': {
-                await this.processTradeEvent(TradeType.sell, data, transactionalEntityManager)
-                break;
-              }
-              case 'set_winner': {
-                await this.processSetWinnerEvent(data, transactionalEntityManager)
-                break;
-              }
-              case 'burn_token_and_set_winner': {
-                await this.processBurnTokenAndSetWinnerEvent(data, transactionalEntityManager)
-                break;
-              }
-              case 'winner_liquidity': {
-                await this.processWinnerLiquidityEvent(data, transactionalEntityManager)
-                break;
-              }
-              case 'new_competition': {
-                await this.processNewCompetitionEvent(data, transactionalEntityManager)
-                break;
-              }
-            }
+        try {
+          const blockchainBlockNumber = +(String(await this.web3.eth.getBlockNumber()))
+          toBlock = fromBlock + this.maxBlocksRange * this.maxBlocksBatchSize - 1
+          if(toBlock > blockchainBlockNumber) {
+            toBlock = blockchainBlockNumber
           }
-        })
 
-        this.logger.log(`[${tokenFactory.address}] [${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), events count=${protocolEvents.length}`)
-      } else {
-        // Wait for blockchain
-        toBlock = fromBlockParam - 1
-        await new Promise(resolve => setTimeout(resolve, 1000));
+          const delta = toBlock - fromBlock
+          if(delta >= 1) {
+            const numberOfBatches = Math.ceil(delta / this.maxBlocksRange)
+
+            const protocolEventsBatch = await Promise.all(
+              new Array(numberOfBatches)
+                .fill(null)
+                .map(async (_, index) => {
+                  const batchFromBlock = fromBlock + index * this.maxBlocksRange
+                  const batchToBlock = Math.min(batchFromBlock + this.maxBlocksRange - 1, toBlock)
+                  return await this.getEventsFromBlocksRange(tokenFactory, batchFromBlock, batchToBlock)
+                })
+            )
+
+            const protocolEvents = protocolEventsBatch
+              .flat()
+              .sort((a, b) => {
+                const blockNumberDiff = Number(a.data.blockNumber) - Number(b.data.blockNumber)
+                if(blockNumberDiff !== 0) {
+                  return blockNumberDiff
+                }
+                return Number(a.data.transactionIndex) - Number(b.data.transactionIndex)
+              })
+
+            for(const protocolEvent of protocolEvents) {
+              const { type, data } = protocolEvent
+              switch (type) {
+                case 'create_token': {
+                  await this.processCreateTokenEvent(data, transactionalEntityManager)
+                  break;
+                }
+                case 'buy': {
+                  await this.processTradeEvent(TradeType.buy, data, transactionalEntityManager)
+                  break;
+                }
+                case 'sell': {
+                  await this.processTradeEvent(TradeType.sell, data, transactionalEntityManager)
+                  break;
+                }
+                case 'set_winner': {
+                  await this.processSetWinnerEvent(data, transactionalEntityManager)
+                  break;
+                }
+                case 'burn_token_and_set_winner': {
+                  await this.processBurnTokenAndSetWinnerEvent(data, transactionalEntityManager)
+                  break;
+                }
+                case 'winner_liquidity': {
+                  await this.processWinnerLiquidityEvent(data, transactionalEntityManager)
+                  break;
+                }
+                case 'new_competition': {
+                  await this.processNewCompetitionEvent(data, transactionalEntityManager)
+                  break;
+                }
+              }
+            }
+
+            this.logger.log(`[${tokenFactory.address}] [${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), events count=${protocolEvents.length}`)
+          } else {
+            // Wait for blockchain
+            toBlock = fromBlockParam - 1
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } catch (e) {
+          toBlock = fromBlockParam - 1
+          this.logger.error(`[${tokenFactory.address}] [${fromBlock} - ${toBlock}] Failed to index blocks range:`, e)
+          await new Promise(resolve => setTimeout(resolve, 30 * 1000));
+        }
+
+        try {
+          await this.updateLastIndexerBlockNumber(tokenFactory.address, toBlock)
+        } catch (e) {
+          this.logger.error(`Failed to update last blockNumber=${toBlock}, exit`, e)
+          process.exit(1)
+        }
       }
-    } catch (e) {
-      toBlock = fromBlockParam - 1
-      this.logger.error(`[${tokenFactory.address}] [${fromBlock} - ${toBlock}] Failed to index blocks range:`, e)
-      await new Promise(resolve => setTimeout(resolve, 30 * 1000));
-    }
+    })
 
-    try {
-      await this.updateLastIndexerBlockNumber(tokenFactory.address, toBlock)
-    } catch (e) {
-      this.logger.error(`Failed to update last blockNumber=${toBlock}, exit`, e)
-      process.exit(1)
-    }
-
-    return this.eventsTrackingLoop(tokenFactory)
+    return this.eventsTrackingLoop(tokenFactories)
   }
 
   private sleep(timeout: number) {
