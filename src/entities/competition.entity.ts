@@ -24,6 +24,10 @@ export class CompetitionEntity {
   blockNumber: number;
 
   @ApiProperty()
+  @Column()
+  tokenFactoryAddress: string;
+
+  @ApiProperty()
   @Column({ type: 'integer' })
   competitionId: number;
 

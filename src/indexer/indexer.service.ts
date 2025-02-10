@@ -180,7 +180,9 @@ export class IndexerService {
     }
 
     const competition = await transactionalEntityManager.findOne(CompetitionEntity, {
-      where: {},
+      where: {
+        tokenFactoryAddress
+      },
       order: {
         competitionId: 'DESC'
       }
@@ -412,6 +414,7 @@ export class IndexerService {
   }
 
   private async processNewCompetitionEvent(event: EventLog, transactionalEntityManager: EntityManager) {
+    const tokenFactoryAddress = event.address.toLowerCase()
     const txnHash = event.transactionHash.toLowerCase()
     const values = event.returnValues
     const competitionId = Number(values['competitionId'] as bigint)
@@ -436,6 +439,7 @@ export class IndexerService {
     await transactionalEntityManager.insert(CompetitionEntity, {
       txnHash,
       blockNumber: Number(event.blockNumber),
+      tokenFactoryAddress,
       competitionId,
       timestampStart: timestamp,
       timestampEnd: null,
