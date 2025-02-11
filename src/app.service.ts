@@ -53,7 +53,8 @@ export class AppService {
             sortingField,
             sortingOrder,
             competitionId,
-            symbol
+            symbol,
+            isCompetition
         } = dto
         const query = this.dataSource.getRepository(Token)
           .createQueryBuilder('token')
@@ -76,7 +77,15 @@ export class AppService {
         }
 
         if(competitionId) {
-            query.where('competition.competitionId = :competitionId', { competitionId })
+            query.andWhere('competition.competitionId = :competitionId', { competitionId })
+        }
+
+        if(typeof isCompetition !== 'undefined') {
+            if(isCompetition) {
+                query.andWhere('competition.competitionId IS NOT NULL')
+            } else {
+                query.andWhere('competition.competitionId IS NULL')
+            }
         }
 
         if(typeof isWinner !== 'undefined') {

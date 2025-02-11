@@ -150,7 +150,7 @@ export class IndexerService {
     competition.winnerToken = token
     await transactionalEntityManager.save(competition)
 
-    this.logger.log(`Added new token winner=${winnerAddress}, competitionId=${competitionId}, timestamp=${timestamp}`)
+    this.logger.log(`Added new token winner=${winnerAddress}, competitionId=${competitionId}, txnHash=${txnHash}, timestamp=${timestamp}`)
   }
 
   private async processCreateTokenEvent(event: EventLog, transactionalEntityManager: EntityManager) {
