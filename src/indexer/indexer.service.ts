@@ -1,5 +1,5 @@
 import {Injectable, Logger} from '@nestjs/common';
-import {Contract, ContractAbi, EventLog, Web3} from "web3";
+import {EventLog, Web3} from "web3";
 import {TokenFactoryConfig, TokenMetadata, TradeType} from "../types";
 import axios from "axios";
 import * as process from "process";
@@ -16,6 +16,7 @@ import {ConfigService} from "@nestjs/config";
 import {UserService} from "../user/user.service";
 import {DataSource, EntityManager} from "typeorm";
 import * as TokenFactoryABI from "../abi/TokenFactory.json";
+import * as TokenFactoryBaseABI from "../abi/TokenFactoryBase.json";
 import {AppService} from "../app.service";
 import {parseUnits, ZeroAddress} from "ethers";
 import Decimal from "decimal.js";
@@ -162,7 +163,7 @@ export class IndexerService {
     const symbol = values['symbol'] as string
     const uri = values['uri'] as string
     const creatorAddress = (values['creator'] as string).toLowerCase()
-    const competitionId = Number(values['competitionId'] as bigint)
+    const competitionId = values['competitionId'] ? Number(values['competitionId'] as bigint) : -1
     const timestamp = Number(values['timestamp'] as bigint)
 
     let uriData = null
@@ -489,6 +490,7 @@ export class IndexerService {
     toBlock: number
   ) {
     const tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, tokenFactory.address);
+    const tokenFactoryBaseContract = new this.web3.eth.Contract(TokenFactoryBaseABI, tokenFactory.address);
     const [
       newCompetitionEvents,
       setWinnerEvents,
@@ -508,37 +510,29 @@ export class IndexerService {
         fromBlock, toBlock, topics: [ this.web3.utils.sha3('WinnerLiquidityAdded(address,address,address,address,uint256,uint128,uint256,uint256,uint256)')],
       }),
       tokenFactoryContract.getPastEvents('allEvents', {
-        fromBlock,
-        toBlock,
-        topics: [
-          this.web3.utils.sha3('TokenCreated(address,string,string,string,address,uint256,uint256)'),
-        ],
+        fromBlock, toBlock, topics: [ this.web3.utils.sha3('TokenCreated(address,string,string,string,address,uint256,uint256)')],
       }),
       tokenFactoryContract.getPastEvents('allEvents', {
-        fromBlock,
-        toBlock,
-        topics: [
-          this.web3.utils.sha3('TokenBuy(address,uint256,uint256,uint256,uint256)'),
-        ],
+        fromBlock, toBlock, topics: [ this.web3.utils.sha3('TokenBuy(address,uint256,uint256,uint256,uint256)')],
       }),
       tokenFactoryContract.getPastEvents('allEvents', {
-        fromBlock,
-        toBlock,
-        topics: [
-          this.web3.utils.sha3('TokenSell(address,uint256,uint256,uint256,uint256)'),
-        ],
+        fromBlock, toBlock, topics: [this.web3.utils.sha3('TokenSell(address,uint256,uint256,uint256,uint256)')],
       }),
       tokenFactoryContract.getPastEvents('allEvents', {
-        fromBlock,
-        toBlock,
-        topics: [
-          this.web3.utils.sha3('BurnTokenAndMintWinner(address,address,address,uint256,uint256,uint256,uint256)'),
-        ],
+        fromBlock, toBlock, topics: [this.web3.utils.sha3('BurnTokenAndMintWinner(address,address,address,uint256,uint256,uint256,uint256)')],
       })
     ]) as EventLog[][]
 
+    const [tokenCreatedBaseEvents] = await Promise.all([
+      tokenFactoryBaseContract.getPastEvents('allEvents', {
+        fromBlock, toBlock, topics: [ this.web3.utils.sha3('TokenCreated(address,string,string,string,address,uint256)')],
+      }),
+    ])
+
     return tokenCreatedEvents
       .map(data => ({ type: 'create_token', data }))
+      // @ts-ignore
+      .concat(...tokenCreatedBaseEvents.map(data => ({ type: 'create_token_base', data })))
       .concat(...buyEvents.map(data => ({ type: 'buy', data })))
       .concat(...sellEvents.map(data => ({ type: 'sell', data })))
       .concat(...setWinnerEvents.map(data => ({ type: 'set_winner', data })))
@@ -590,7 +584,7 @@ export class IndexerService {
             for(const protocolEvent of protocolEvents) {
               const { type, data } = protocolEvent
               switch (type) {
-                case 'create_token': {
+                case 'create_token': case 'create_token_base': {
                   await this.processCreateTokenEvent(data, transactionalEntityManager)
                   break;
                 }
