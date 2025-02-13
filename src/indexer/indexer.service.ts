@@ -118,6 +118,7 @@ export class IndexerService {
   }
 
   private async processSetWinnerEvent(event: EventLog, transactionalEntityManager: EntityManager) {
+    console.log('processSetWinnerEvent', event)
     const txnHash = event.transactionHash.toLowerCase()
     const blockNumber = Number(event.blockNumber)
     const values = event.returnValues
@@ -435,6 +436,7 @@ export class IndexerService {
       prevCompetition.isCompleted = true
       prevCompetition.timestampEnd = timestamp
       await transactionalEntityManager.save(prevCompetition)
+      this.logger.log(`Competition completed, competitionId=${prevCompetition.competitionId}`);
     } else {
       if(competitionId > 2) {
         this.logger.error(`Failed to get prev competition=${prevCompetitionId}, new competitionId=${competitionId}, exit`)
@@ -531,14 +533,14 @@ export class IndexerService {
 
     return tokenCreatedEvents
       .map(data => ({ type: 'create_token', data }))
-      // @ts-ignore
-      .concat(...tokenCreatedBaseEvents.map(data => ({ type: 'create_token_base', data })))
       .concat(...buyEvents.map(data => ({ type: 'buy', data })))
       .concat(...sellEvents.map(data => ({ type: 'sell', data })))
       .concat(...setWinnerEvents.map(data => ({ type: 'set_winner', data })))
       .concat(...burnAndSetWinnerEvents.map(data => ({ type: 'burn_token_and_set_winner', data })))
       .concat(...winnerLiquidityEvents.map(data => ({ type: 'winner_liquidity', data })))
       .concat(...newCompetitionEvents.map(data => ({ type: 'new_competition', data })))
+      // @ts-ignore
+      .concat(...tokenCreatedBaseEvents.map(data => ({ type: 'create_token_base', data })))
   }
 
   async eventsTrackingLoop(tokenFactories: TokenFactoryConfig[]) {
@@ -656,7 +658,7 @@ export class IndexerService {
     const tx = {
       from: this.accountAddress,
       to: tokenFactoryAddress,
-      gas: gasFees,
+      gas: gasFees * 2n,
       gasPrice,
       data: tokenFactoryContract.methods
         .setWinnerByCompetitionId(prevCompetitionId)
@@ -673,6 +675,9 @@ export class IndexerService {
     return sendTxn.transactionHash.toString()
   }
 
+  // Check collateral in TokenFactoryBaseContract
+
+  // Check competition contract
   @Cron(CronExpression.EVERY_MINUTE, {
     name: CompetitionScheduleCheckJob
   })
@@ -715,7 +720,7 @@ export class IndexerService {
             .startOf('day')
         }
       } else {
-        this.logger.error(`Previous competition not found in database. New competition will be created.`)
+        this.logger.warn(`Previous competition not found in database. New competition will be created.`)
         // Start new competition tomorrow at 00:00
         nextCompetitionDate = moment()
           .tz(timeZone)
@@ -729,6 +734,7 @@ export class IndexerService {
       if(nextCompetitionDate.diff(moment(), 'minutes') < 1) {
         // Random is important otherwise they just make a new token 1 second before ending, and pumping it with a lot of ONE
         const randomMinutesNumber = getRandomNumberFromInterval(1, 59)
+        // const randomMinutesNumber = 0
         nextCompetitionDate = nextCompetitionDate.add(randomMinutesNumber, 'minutes')
 
         this.logger.log(`Next competition scheduled at ${
@@ -748,10 +754,10 @@ export class IndexerService {
 
   async initiateNewCompetition(tokenFactoryAddress: string) {
     const attemptsCount = 3
+    const tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, tokenFactoryAddress);
     const tokenCollateralThreshold = BigInt(parseUnits(
       this.configService.get<number>('COMPETITION_COLLATERAL_THRESHOLD').toString(), 18
     ))
-    const tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, tokenFactoryAddress);
 
     for(let i = 0; i < attemptsCount; i++) {
       try {
