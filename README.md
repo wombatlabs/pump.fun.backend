@@ -117,8 +117,9 @@ create database pump_fun_backend_staging;
 flyctl secrets set TOKEN_FACTORY_ADDRESS=0xEa5CE8534c4a1462C56Ef82a0a82B7770c0c29ea
 flyctl secrets set INDEXER_INITIAL_BLOCK_NUMBER=66615543
 
-flyctl secrets set TOKEN_FACTORY_ADDRESS=0x3d2f3d9385980A56fCb216571e074C7906Fb50eB --config fly.staging.toml
-flyctl secrets set INDEXER_INITIAL_BLOCK_NUMBER=68799061 --config fly.staging.toml
+flyctl secrets set TOKEN_FACTORY="0x1166665bc13B412Bf49b73bF92acA89A1e1DA448,69332926;0x6D362d144cC8aD63c732E82a849087426EDEEB6f,69334629" --config fly.staging.toml
+flyctl secrets set COMPETITION_COLLATERAL_THRESHOLD=0.001 --config fly.staging.toml
+flyctl secrets set COMPETITION_DAYS_INTERVAL=1 --config fly.staging.toml
 ```
 
 #### Deploy backend update
@@ -143,13 +144,21 @@ flyctl deploy --ha=false --config fly.staging.toml
 
 #### Staging
 ```shell
-Token deployed to: 0xF9b7260506552B998828876eF7dF52D0F5C1F444
-BancorBondingCurve deployed to: 0x574c7282a2A7F458Ee1C01FA568dA6FBc2E35fD7
-NonfungiblePositionManager deployed to: 0xcbD7832E9788C93aeCbB2faE15A99F692F240A46
-TokenFactoryUpgradeable deployed to: 0x3d2f3d9385980A56fCb216571e074C7906Fb50eB
+Competition TokenFactory:
+Token deployed to: 0x24605aadA2E4e2483B8B6097Df64d4E678C1a97E
+BancorBondingCurve deployed to: 0x5fd343cC45B40BD44AACc5b7E7B5D9b3C4651BBC
+NonfungiblePositionManager deployed to: 0x1B01BF64E54Cf024774a062c9DD857889341917A
+TokenFactoryUpgradeable deployed to: 0xd5e9b7ec8f2e4feB6fab99209fa352ad6DE5D625
+Processsing tokenFactory.startNewCompetition:
+Sending tokenFactory.startNewCompetition...
+... Sent! 0xc57081272c413ad50a472ff12de5debdf4d5c56ad09368012f893d198957c12a
+startNewCompetition:  2
 
-Token deployed to: 0xBb3Ee828947Be4736ed5AA572F1F37007C4F07E8
-BancorBondingCurve deployed to: 0xaEeDf7830c74274B318EC2Db041Da9b9d95c2cC5
-NonfungiblePositionManager deployed to: 0xC0Ce91907EbA2F937062D05A5bfe8FcE51967478
-TokenFactoryUpgradeable deployed to: 0xE12aC751317eb2e78f83acB212415C9c1116C73A
+-------------------------------------------------------------------------------------
+
+TokenFactoryBase:
+Token deployed to: 0xdB7C0e81F9a032B1e94C7d0bBEB16A4BB7c8Ec4a
+BancorBondingCurve deployed to: 0xc93a3092cc8753085Ab60e0F97840B88aC13aa18
+NonfungiblePositionManager deployed to: 0x464B0Ef7640829F71fb5ae0BF0ee1c0632E76E93
+TokenFactoryUpgradeable deployed to: 0xCBe0Ca4739282793D65c486c29a929624a0bcA5D
 ```

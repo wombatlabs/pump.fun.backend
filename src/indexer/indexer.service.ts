@@ -26,6 +26,7 @@ import {Moment} from "moment";
 import {getRandomNumberFromInterval} from "../utils";
 
 const CompetitionScheduleCheckJob = 'competition_check_job';
+const BaseCollateralCheckJob = 'base_collateral_check_job';
 
 @Injectable()
 export class IndexerService {
@@ -676,6 +677,25 @@ export class IndexerService {
   }
 
   // Check collateral in TokenFactoryBaseContract
+  // @Cron(CronExpression.EVERY_MINUTE, {
+  //   name: BaseCollateralCheckJob
+  // })
+  // async checkBaseTokenCollateral() {
+  //   const job = this.schedulerRegistry.getCronJob(BaseCollateralCheckJob)
+  //   if(job) {
+  //     job.stop()
+  //   } else {
+  //     this.logger.error('Job not found: BaseCollateralCheckJob. Failed to check base token collateral.')
+  //     return
+  //   }
+  //
+  //   try {
+  //
+  //   } catch (e) {
+  //   } finally {
+  //     job.start();
+  //   }
+  // }
 
   // Check competition contract
   @Cron(CronExpression.EVERY_MINUTE, {
