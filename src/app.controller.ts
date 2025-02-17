@@ -14,7 +14,7 @@ import {
   Request,
   UploadedFile,
   UseGuards,
-  UseInterceptors
+  UseInterceptors, UsePipes, ValidationPipe
 } from '@nestjs/common';
 import {ApiBearerAuth, ApiTags} from '@nestjs/swagger';
 import {ConfigService} from '@nestjs/config';
@@ -54,16 +54,17 @@ export class AppController {
     return this.configService.get('version');
   }
 
-  @Get('/status')
-  async getStatus() {
-    const latestIndexedBlock = await this.indexerService.getLatestIndexedBlockNumber();
-    return {
-      latestIndexedBlock,
-    }
-  }
+  // @Get('/status')
+  // async getStatus() {
+  //   const latestIndexedBlock = await this.indexerService.getLatestIndexedBlockNumber();
+  //   return {
+  //     latestIndexedBlock,
+  //   }
+  // }
 
   @CacheTTL(200)
   @Get('/tokens')
+  @UsePipes(new ValidationPipe({transform: true}))
   getTokens(@Query() dto: GetTokensDto) {
     return this.appService.getTokens(dto)
   }

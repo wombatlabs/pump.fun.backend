@@ -4,7 +4,7 @@ import {
   Entity,
   OneToOne,
   PrimaryGeneratedColumn,
-  JoinColumn
+  JoinColumn, OneToMany
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import {Token} from "./token.entity";
@@ -22,6 +22,10 @@ export class CompetitionEntity {
   @ApiProperty()
   @Column({ type: 'integer' })
   blockNumber: number;
+
+  @ApiProperty()
+  @Column()
+  tokenFactoryAddress: string;
 
   @ApiProperty()
   @Column({ type: 'integer' })
@@ -43,6 +47,9 @@ export class CompetitionEntity {
   @OneToOne((type) => Token, token => token.competition)
   @JoinColumn()
   winnerToken: Token | null
+
+  @OneToMany(() => Token, (token) => token.competition)
+  tokens: Token[]
 
   @ApiProperty()
   @CreateDateColumn({ name: 'createdAt' })

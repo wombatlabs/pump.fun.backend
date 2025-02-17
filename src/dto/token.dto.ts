@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {IsEnum, IsOptional, IsString} from 'class-validator';
+import {IsBoolean, IsEnum, IsOptional, IsString} from 'class-validator';
 import {Transform, Type} from "class-transformer";
 import {SortOrder} from "../types";
 
@@ -20,6 +20,11 @@ export class GetTokensDto {
   @ApiProperty({ type: String, required: false, default: '' })
   @IsOptional()
   symbol?: string;
+
+  @ApiProperty({ type: Boolean, required: false })
+  @Transform(({ value} ) => value === 'true')
+  @IsOptional()
+  isCompetition?: boolean;
 
   @ApiProperty({ type: Boolean, required: false })
   isWinner?: boolean;

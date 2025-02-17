@@ -53,7 +53,8 @@ export class AppService {
             sortingField,
             sortingOrder,
             competitionId,
-            symbol
+            symbol,
+            isCompetition
         } = dto
         const query = this.dataSource.getRepository(Token)
           .createQueryBuilder('token')
@@ -76,7 +77,15 @@ export class AppService {
         }
 
         if(competitionId) {
-            query.where('competition.competitionId = :competitionId', { competitionId })
+            query.andWhere('competition.competitionId = :competitionId', { competitionId })
+        }
+
+        if(typeof isCompetition !== 'undefined') {
+            if(isCompetition) {
+                query.andWhere('competition.competitionId IS NOT NULL')
+            } else {
+                query.andWhere('competition.competitionId IS NULL')
+            }
         }
 
         if(typeof isWinner !== 'undefined') {
@@ -142,17 +151,35 @@ export class AppService {
     async getCompetitions(dto: GetCompetitionsDto = {}, entityManager?: EntityManager) {
         const {offset = 0, limit = 100, competitionId} = dto
 
-        return await (entityManager || this.dataSource.manager).find(CompetitionEntity, {
-            relations: ['winnerToken'],
-            where: {
-                competitionId
-            },
-            order: {
-                competitionId: 'desc'
-            },
-            skip: offset,
-            take: limit
-        })
+        const query = (entityManager || this.dataSource.manager).getRepository(CompetitionEntity)
+          .createQueryBuilder('competitions')
+          .leftJoinAndSelect('competitions.winnerToken', 'winnerToken')
+          .loadRelationCountAndMap('competitions.tokensCount', 'competitions.tokens')
+          .orderBy({
+              'competitions.competitionId': 'DESC'
+          })
+          .offset(offset)
+          .limit(limit)
+
+        if(competitionId) {
+            query.andWhere({
+                'competitionId': competitionId
+            })
+        }
+
+        return await query.getMany();
+
+        // return await (entityManager || this.dataSource.manager).find(CompetitionEntity, {
+        //     relations: ['winnerToken'],
+        //     where: {
+        //         competitionId
+        //     },
+        //     order: {
+        //         competitionId: 'desc'
+        //     },
+        //     skip: offset,
+        //     take: limit
+        // })
     }
 
     async getTokenBurns(dto: GetTokenBurnsDto){

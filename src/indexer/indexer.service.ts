@@ -1,6 +1,6 @@
 import {Injectable, Logger} from '@nestjs/common';
-import {Contract, ContractAbi, EventLog, Web3} from "web3";
-import {TokenMetadata, TradeType} from "../types";
+import {EventLog, Web3} from "web3";
+import {TokenFactoryConfig, TokenMetadata, TradeType} from "../types";
 import axios from "axios";
 import * as process from "process";
 import {
@@ -16,22 +16,23 @@ import {ConfigService} from "@nestjs/config";
 import {UserService} from "../user/user.service";
 import {DataSource, EntityManager} from "typeorm";
 import * as TokenFactoryABI from "../abi/TokenFactory.json";
+import * as TokenFactoryBaseABI from "../abi/TokenFactoryBase.json";
 import {AppService} from "../app.service";
 import {parseUnits, ZeroAddress} from "ethers";
 import Decimal from "decimal.js";
+import {Cron, CronExpression, SchedulerRegistry} from "@nestjs/schedule";
 import * as moment from "moment-timezone";
 import {Moment} from "moment";
 import {getRandomNumberFromInterval} from "../utils";
-import {Cron, CronExpression, SchedulerRegistry} from "@nestjs/schedule";
 
-const CompetitionScheduleCheckJob = 'competition_schedule_check'
+const CompetitionScheduleCheckJob = 'competition_check_job';
+const BaseCollateralCheckJob = 'base_collateral_check_job';
 
 @Injectable()
 export class IndexerService {
   private readonly logger = new Logger(IndexerService.name);
   private readonly web3: Web3
   private readonly accountAddress: string
-  private readonly tokenFactoryContract: Contract<ContractAbi>
   private readonly maxBlocksRange = 1000
   private readonly maxBlocksBatchSize = 20
 
@@ -43,11 +44,11 @@ export class IndexerService {
     private schedulerRegistry: SchedulerRegistry
   ) {
     const rpcUrl = configService.get('RPC_URL')
-    const contractAddress = configService.get('TOKEN_FACTORY_ADDRESS')
+    const tokenFactoryParams = configService.get('TOKEN_FACTORY')
     const privateKey = configService.get('SERVICE_PRIVATE_KEY')
 
-    if(!contractAddress) {
-      this.logger.error(`[TOKEN_FACTORY_ADDRESS] is missing but required, exit`)
+    if(!tokenFactoryParams) {
+      this.logger.error(`[TOKEN_FACTORY] is missing but required, exit`)
       process.exit(1)
     }
 
@@ -58,40 +59,60 @@ export class IndexerService {
 
     this.logger.log(`Starting app service, RPC_URL=${
       rpcUrl
-    }, TOKEN_FACTORY_ADDRESS=${
-      contractAddress
+    }, TOKEN_FACTORY=${
+      tokenFactoryParams
     }`)
 
     this.web3 = new Web3(rpcUrl);
     const account = this.web3.eth.accounts.privateKeyToAccount(privateKey)
     this.accountAddress = account.address
     this.web3.eth.accounts.wallet.add(account);
-    this.tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, contractAddress);
     this.logger.log(`Service account address=${account.address}`)
     this.bootstrap().then(
-      () => {
-        this.eventsTrackingLoop()
+      (tokenFactories) => {
+        this.eventsTrackingLoop(tokenFactories)
+        // this.initiateNewCompetition('')
       }
     )
     this.logger.log(`App service started`)
   }
 
+  private getTokenFactories(): TokenFactoryConfig[] {
+    const values = this.configService.get<string>('TOKEN_FACTORY')
+    const factoryConfigs = values.split(';')
+    return factoryConfigs.map(item => {
+      const [address, blockNumber] = item.split(',')
+      return {
+        address,
+        blockNumber: Number(blockNumber)
+      }
+    })
+  }
+
   private async bootstrap() {
     try {
-      const indexerState = await this.dataSource.manager.findOne(IndexerState, {
-        where: {}
-      })
-      if(!indexerState) {
-        const blockNumber = +this.configService.get<number>('INDEXER_INITIAL_BLOCK_NUMBER')
-        if(!blockNumber) {
-          this.logger.error('[INDEXER_INITIAL_BLOCK_NUMBER] is empty but required, exit')
-          process.exit(1)
-        }
-        await this.dataSource.manager.insert(IndexerState, {
-          blockNumber
+      const tokenFactories = this.getTokenFactories()
+
+      for(const tokenFactory of tokenFactories) {
+        const { address, blockNumber } = tokenFactory
+        const indexerState = await this.dataSource.manager.findOne(IndexerState, {
+          where: {
+            name: address
+          }
         })
-        this.logger.log(`Set initial blockNumber=${blockNumber}`)
+
+        if(!indexerState) {
+          await this.dataSource.manager.insert(IndexerState, {
+            name: address,
+            blockNumber
+          })
+          this.logger.log(`Bootstrap: created new tokenFactory=${address}, blockNumber=${blockNumber}`)
+        } else {
+          this.logger.log(`Bootstrap: existed tokenFactory=${indexerState.name}, blockNumber=${indexerState.blockNumber}`)
+        }
       }
+
+      return tokenFactories
     } catch (e) {
       this.logger.error(`Failed to bootstrap, exit`, e)
       process.exit(1)
@@ -132,10 +153,11 @@ export class IndexerService {
     competition.winnerToken = token
     await transactionalEntityManager.save(competition)
 
-    this.logger.log(`Added new token winner=${winnerAddress}, competitionId=${competitionId}, timestamp=${timestamp}`)
+    this.logger.log(`Added new token winner=${winnerAddress}, competitionId=${competitionId}, txnHash=${txnHash}, timestamp=${timestamp}`)
   }
 
   private async processCreateTokenEvent(event: EventLog, transactionalEntityManager: EntityManager) {
+    const tokenFactoryAddress = event.address.toLowerCase()
     const txnHash = event.transactionHash.toLowerCase()
     const values = event.returnValues
     const tokenAddress = (values['token'] as string).toLowerCase()
@@ -143,7 +165,7 @@ export class IndexerService {
     const symbol = values['symbol'] as string
     const uri = values['uri'] as string
     const creatorAddress = (values['creator'] as string).toLowerCase()
-    const competitionId = Number(values['competitionId'] as bigint)
+    const competitionId = values['competitionId'] ? Number(values['competitionId'] as bigint) : -1
     const timestamp = Number(values['timestamp'] as bigint)
 
     let uriData = null
@@ -166,7 +188,9 @@ export class IndexerService {
     }
 
     const competition = await transactionalEntityManager.findOne(CompetitionEntity, {
-      where: {},
+      where: {
+        tokenFactoryAddress
+      },
       order: {
         competitionId: 'DESC'
       }
@@ -184,6 +208,7 @@ export class IndexerService {
       txnHash,
       address: tokenAddress,
       blockNumber: Number(event.blockNumber),
+      tokenFactoryAddress,
       name,
       symbol,
       timestamp,
@@ -397,6 +422,7 @@ export class IndexerService {
   }
 
   private async processNewCompetitionEvent(event: EventLog, transactionalEntityManager: EntityManager) {
+    const tokenFactoryAddress = event.address.toLowerCase()
     const txnHash = event.transactionHash.toLowerCase()
     const values = event.returnValues
     const competitionId = Number(values['competitionId'] as bigint)
@@ -411,6 +437,7 @@ export class IndexerService {
       prevCompetition.isCompleted = true
       prevCompetition.timestampEnd = timestamp
       await transactionalEntityManager.save(prevCompetition)
+      this.logger.log(`Competition completed, competitionId=${prevCompetition.competitionId}`);
     } else {
       if(competitionId > 2) {
         this.logger.error(`Failed to get prev competition=${prevCompetitionId}, new competitionId=${competitionId}, exit`)
@@ -421,6 +448,7 @@ export class IndexerService {
     await transactionalEntityManager.insert(CompetitionEntity, {
       txnHash,
       blockNumber: Number(event.blockNumber),
+      tokenFactoryAddress,
       competitionId,
       timestampStart: timestamp,
       timestampEnd: null,
@@ -430,26 +458,42 @@ export class IndexerService {
     this.logger.log(`NewCompetitionStarted: competitionId=${competitionId}, timestamp=${timestamp}, txnHash=${txnHash}`);
   }
 
-  public async getLatestIndexedBlockNumber() {
+  public async getLatestIndexedBlockNumber(indexerName: string) {
     const indexerState = await this.dataSource.manager.findOne(IndexerState, {
-      where: {},
+      where: {
+        name: indexerName
+      },
     })
+
     if(indexerState) {
       return indexerState.blockNumber
     }
     return 0
   }
 
-  private async updateLastIndexerBlockNumber(blockNumber: number) {
+  private async updateLastIndexerBlockNumber(indexerName: string, blockNumber: number) {
     const stateRepository = this.dataSource.manager.getRepository(IndexerState)
     const indexerState = await stateRepository.findOne({
-      where: {}
+      where: {
+        name: indexerName
+      }
     })
+
+    if(!indexerState) {
+      throw new Error('Indexer state not found: ' + indexerName)
+    }
+
     indexerState.blockNumber = blockNumber
     await stateRepository.save(indexerState)
   }
 
-  async getEventsFromBlocksRange(fromBlock: number, toBlock: number) {
+  async getEventsFromBlocksRange(
+    tokenFactory: TokenFactoryConfig,
+    fromBlock: number,
+    toBlock: number
+  ) {
+    const tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, tokenFactory.address);
+    const tokenFactoryBaseContract = new this.web3.eth.Contract(TokenFactoryBaseABI, tokenFactory.address);
     const [
       newCompetitionEvents,
       setWinnerEvents,
@@ -459,44 +503,34 @@ export class IndexerService {
       sellEvents,
       burnAndSetWinnerEvents
     ] = await Promise.all([
-      this.tokenFactoryContract.getPastEvents('allEvents', {
+      tokenFactoryContract.getPastEvents('allEvents', {
         fromBlock, toBlock, topics: [ this.web3.utils.sha3('NewCompetitionStarted(uint256,uint256)')],
       }),
-      this.tokenFactoryContract.getPastEvents('allEvents', {
+      tokenFactoryContract.getPastEvents('allEvents', {
         fromBlock, toBlock, topics: [ this.web3.utils.sha3('SetWinner(address,uint256,uint256)')],
       }),
-      this.tokenFactoryContract.getPastEvents('allEvents', {
+      tokenFactoryContract.getPastEvents('allEvents', {
         fromBlock, toBlock, topics: [ this.web3.utils.sha3('WinnerLiquidityAdded(address,address,address,address,uint256,uint128,uint256,uint256,uint256)')],
       }),
-      this.tokenFactoryContract.getPastEvents('allEvents', {
-        fromBlock,
-        toBlock,
-        topics: [
-          this.web3.utils.sha3('TokenCreated(address,string,string,string,address,uint256,uint256)'),
-        ],
+      tokenFactoryContract.getPastEvents('allEvents', {
+        fromBlock, toBlock, topics: [ this.web3.utils.sha3('TokenCreated(address,string,string,string,address,uint256,uint256)')],
       }),
-      this.tokenFactoryContract.getPastEvents('allEvents', {
-        fromBlock,
-        toBlock,
-        topics: [
-          this.web3.utils.sha3('TokenBuy(address,uint256,uint256,uint256,uint256)'),
-        ],
+      tokenFactoryContract.getPastEvents('allEvents', {
+        fromBlock, toBlock, topics: [ this.web3.utils.sha3('TokenBuy(address,uint256,uint256,uint256,uint256)')],
       }),
-      this.tokenFactoryContract.getPastEvents('allEvents', {
-        fromBlock,
-        toBlock,
-        topics: [
-          this.web3.utils.sha3('TokenSell(address,uint256,uint256,uint256,uint256)'),
-        ],
+      tokenFactoryContract.getPastEvents('allEvents', {
+        fromBlock, toBlock, topics: [this.web3.utils.sha3('TokenSell(address,uint256,uint256,uint256,uint256)')],
       }),
-      this.tokenFactoryContract.getPastEvents('allEvents', {
-        fromBlock,
-        toBlock,
-        topics: [
-          this.web3.utils.sha3('BurnTokenAndMintWinner(address,address,address,uint256,uint256,uint256,uint256)'),
-        ],
+      tokenFactoryContract.getPastEvents('allEvents', {
+        fromBlock, toBlock, topics: [this.web3.utils.sha3('BurnTokenAndMintWinner(address,address,address,uint256,uint256,uint256,uint256)')],
       })
     ]) as EventLog[][]
+
+    const [tokenCreatedBaseEvents] = await Promise.all([
+      tokenFactoryBaseContract.getPastEvents('allEvents', {
+        fromBlock, toBlock, topics: [ this.web3.utils.sha3('TokenCreated(address,string,string,string,address,uint256)')],
+      }),
+    ])
 
     return tokenCreatedEvents
       .map(data => ({ type: 'create_token', data }))
@@ -506,110 +540,115 @@ export class IndexerService {
       .concat(...burnAndSetWinnerEvents.map(data => ({ type: 'burn_token_and_set_winner', data })))
       .concat(...winnerLiquidityEvents.map(data => ({ type: 'winner_liquidity', data })))
       .concat(...newCompetitionEvents.map(data => ({ type: 'new_competition', data })))
+      // @ts-ignore
+      .concat(...tokenCreatedBaseEvents.map(data => ({ type: 'create_token_base', data })))
   }
 
-  async eventsTrackingLoop() {
-    const lastIndexedBlockNumber = await this.getLatestIndexedBlockNumber()
-    const fromBlockParam = lastIndexedBlockNumber + 1
+  async eventsTrackingLoop(tokenFactories: TokenFactoryConfig[]) {
+    await this.dataSource.manager.transaction(async (transactionalEntityManager) => {
+      for(const tokenFactory of tokenFactories) {
+        const lastIndexedBlockNumber = await this.getLatestIndexedBlockNumber(tokenFactory.address)
+        const fromBlockParam = lastIndexedBlockNumber + 1
 
-    let fromBlock = fromBlockParam
-    let toBlock = fromBlock
+        let fromBlock = fromBlockParam
+        let toBlock = fromBlock
 
-    try {
-      const blockchainBlockNumber = +(String(await this.web3.eth.getBlockNumber()))
-      toBlock = fromBlock + this.maxBlocksRange * this.maxBlocksBatchSize - 1
-      if(toBlock > blockchainBlockNumber) {
-        toBlock = blockchainBlockNumber
-      }
-
-      const delta = toBlock - fromBlock
-      if(delta >= 1) {
-        const numberOfBatches = Math.ceil(delta / this.maxBlocksRange)
-
-        const protocolEventsBatch = await Promise.all(
-          new Array(numberOfBatches)
-            .fill(null)
-            .map(async (_, index) => {
-              const batchFromBlock = fromBlock + index * this.maxBlocksRange
-              const batchToBlock = Math.min(batchFromBlock + this.maxBlocksRange - 1, toBlock)
-              return await this.getEventsFromBlocksRange(batchFromBlock, batchToBlock)
-            })
-        )
-
-        const protocolEvents = protocolEventsBatch
-          .flat()
-          .sort((a, b) => {
-            const blockNumberDiff = Number(a.data.blockNumber) - Number(b.data.blockNumber)
-            if(blockNumberDiff !== 0) {
-              return blockNumberDiff
-            }
-            return Number(a.data.transactionIndex) - Number(b.data.transactionIndex)
-          })
-
-        await this.dataSource.manager.transaction(async (transactionalEntityManager) => {
-          for(const protocolEvent of protocolEvents) {
-            const { type, data } = protocolEvent
-            switch (type) {
-              case 'create_token': {
-                await this.processCreateTokenEvent(data, transactionalEntityManager)
-                break;
-              }
-              case 'buy': {
-                await this.processTradeEvent(TradeType.buy, data, transactionalEntityManager)
-                break;
-              }
-              case 'sell': {
-                await this.processTradeEvent(TradeType.sell, data, transactionalEntityManager)
-                break;
-              }
-              case 'set_winner': {
-                await this.processSetWinnerEvent(data, transactionalEntityManager)
-                break;
-              }
-              case 'burn_token_and_set_winner': {
-                await this.processBurnTokenAndSetWinnerEvent(data, transactionalEntityManager)
-                break;
-              }
-              case 'winner_liquidity': {
-                await this.processWinnerLiquidityEvent(data, transactionalEntityManager)
-                break;
-              }
-              case 'new_competition': {
-                await this.processNewCompetitionEvent(data, transactionalEntityManager)
-                break;
-              }
-            }
+        try {
+          const blockchainBlockNumber = +(String(await this.web3.eth.getBlockNumber()))
+          toBlock = fromBlock + this.maxBlocksRange * this.maxBlocksBatchSize - 1
+          if(toBlock > blockchainBlockNumber) {
+            toBlock = blockchainBlockNumber
           }
-        })
 
-        this.logger.log(`[${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), events count=${protocolEvents.length}`)
-      } else {
-        // Wait for blockchain
-        toBlock = fromBlockParam - 1
-        await new Promise(resolve => setTimeout(resolve, 1000));
+          const delta = toBlock - fromBlock
+          if(delta >= 1) {
+            const numberOfBatches = Math.ceil(delta / this.maxBlocksRange)
+
+            const protocolEventsBatch = await Promise.all(
+              new Array(numberOfBatches)
+                .fill(null)
+                .map(async (_, index) => {
+                  const batchFromBlock = fromBlock + index * this.maxBlocksRange
+                  const batchToBlock = Math.min(batchFromBlock + this.maxBlocksRange - 1, toBlock)
+                  return await this.getEventsFromBlocksRange(tokenFactory, batchFromBlock, batchToBlock)
+                })
+            )
+
+            const protocolEvents = protocolEventsBatch
+              .flat()
+              .sort((a, b) => {
+                const blockNumberDiff = Number(a.data.blockNumber) - Number(b.data.blockNumber)
+                if(blockNumberDiff !== 0) {
+                  return blockNumberDiff
+                }
+                return Number(a.data.transactionIndex) - Number(b.data.transactionIndex)
+              })
+
+            for(const protocolEvent of protocolEvents) {
+              const { type, data } = protocolEvent
+              switch (type) {
+                case 'create_token': case 'create_token_base': {
+                  await this.processCreateTokenEvent(data, transactionalEntityManager)
+                  break;
+                }
+                case 'buy': {
+                  await this.processTradeEvent(TradeType.buy, data, transactionalEntityManager)
+                  break;
+                }
+                case 'sell': {
+                  await this.processTradeEvent(TradeType.sell, data, transactionalEntityManager)
+                  break;
+                }
+                case 'set_winner': {
+                  await this.processSetWinnerEvent(data, transactionalEntityManager)
+                  break;
+                }
+                case 'burn_token_and_set_winner': {
+                  await this.processBurnTokenAndSetWinnerEvent(data, transactionalEntityManager)
+                  break;
+                }
+                case 'winner_liquidity': {
+                  await this.processWinnerLiquidityEvent(data, transactionalEntityManager)
+                  break;
+                }
+                case 'new_competition': {
+                  await this.processNewCompetitionEvent(data, transactionalEntityManager)
+                  break;
+                }
+              }
+            }
+
+            this.logger.log(`[${tokenFactory.address}] [${fromBlock}-${toBlock}] (${((toBlock - fromBlock + 1))} blocks), events count=${protocolEvents.length}`)
+          } else {
+            // Wait for blockchain
+            toBlock = fromBlockParam - 1
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } catch (e) {
+          toBlock = fromBlockParam - 1
+          this.logger.error(`[${tokenFactory.address}] [${fromBlock} - ${toBlock}] Failed to index blocks range:`, e)
+          await new Promise(resolve => setTimeout(resolve, 30 * 1000));
+        }
+
+        try {
+          await this.updateLastIndexerBlockNumber(tokenFactory.address, toBlock)
+        } catch (e) {
+          this.logger.error(`Failed to update last blockNumber=${toBlock}, exit`, e)
+          process.exit(1)
+        }
       }
-    } catch (e) {
-      toBlock = fromBlockParam - 1
-      this.logger.error(`[${fromBlock} - ${toBlock}] Failed to index blocks range:`, e)
-      await new Promise(resolve => setTimeout(resolve, 30 * 1000));
-    }
+    })
 
-    try {
-      await this.updateLastIndexerBlockNumber(toBlock)
-    } catch (e) {
-      this.logger.error(`Failed to update last blockNumber=${toBlock}, exit`, e)
-      process.exit(1)
-    }
-
-    return this.eventsTrackingLoop()
+    return this.eventsTrackingLoop(tokenFactories)
   }
 
   private sleep(timeout: number) {
     return new Promise(resolve => setTimeout(resolve, timeout));
   }
 
-  private async setWinnerByCompetitionId(prevCompetitionId: bigint) {
-    const gasFees = await this.tokenFactoryContract.methods
+  private async setWinnerByCompetitionId(tokenFactoryAddress: string, prevCompetitionId: bigint) {
+    const tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, tokenFactoryAddress);
+    const gasFees = await tokenFactoryContract.methods
       .setWinnerByCompetitionId(prevCompetitionId)
       .estimateGas({
         from: this.accountAddress
@@ -619,10 +658,10 @@ export class IndexerService {
 
     const tx = {
       from: this.accountAddress,
-      to: this.configService.get('TOKEN_FACTORY_ADDRESS'),
-      gas: gasFees,
+      to: tokenFactoryAddress,
+      gas: gasFees * 2n,
       gasPrice,
-      data: this.tokenFactoryContract.methods
+      data: tokenFactoryContract.methods
         .setWinnerByCompetitionId(prevCompetitionId)
         .encodeABI(),
     };
@@ -637,75 +676,105 @@ export class IndexerService {
     return sendTxn.transactionHash.toString()
   }
 
+  // Check collateral in TokenFactoryBaseContract
   // @Cron(CronExpression.EVERY_MINUTE, {
-  //   name: CompetitionScheduleCheckJob
+  //   name: BaseCollateralCheckJob
   // })
-  // async scheduleNextCompetition() {
-  //   const schedulerJob = this.schedulerRegistry.getCronJob(CompetitionScheduleCheckJob)
-  //   if(schedulerJob) {
-  //     schedulerJob.stop()
+  // async checkBaseTokenCollateral() {
+  //   const job = this.schedulerRegistry.getCronJob(BaseCollateralCheckJob)
+  //   if(job) {
+  //     job.stop()
+  //   } else {
+  //     this.logger.error('Job not found: BaseCollateralCheckJob. Failed to check base token collateral.')
+  //     return
   //   }
   //
-  //   const daysInterval = this.configService.get<number>('COMPETITION_DAYS_INTERVAL')
-  //   const timeZone = 'America/Los_Angeles'
-  //   let nextCompetitionDate: Moment
-  //   // Competition starts every 7 day at a random time within one hour around midnight
-  //
   //   try {
-  //     const [prevCompetition] = await this.appService.getCompetitions({ limit: 1 })
-  //     if(prevCompetition) {
-  //       const { timestampStart, isCompleted } = prevCompetition
   //
-  //       const lastCompetitionDeltaMs = moment().diff(moment(timestampStart * 1000))
-  //       // Interval was exceeded
-  //       const isIntervalExceeded = lastCompetitionDeltaMs > daysInterval * 24 * 60 * 60 * 1000
-  //
-  //       if(isCompleted || isIntervalExceeded) {
-  //         // Start new competition tomorrow at 00:00
-  //         nextCompetitionDate = moment()
-  //           .tz(timeZone)
-  //           .add(1, 'days')
-  //           .startOf('day')
-  //       } else {
-  //         // Start new competition in 7 days at 00:00
-  //         nextCompetitionDate = moment(timestampStart * 1000)
-  //           .tz(timeZone)
-  //           .add(daysInterval, 'days')
-  //           .startOf('day')
-  //       }
-  //     } else {
-  //       this.logger.error(`Previous competition not found in database. New competition will be created.`)
-  //       // Start new competition tomorrow at 00:00
-  //       nextCompetitionDate = moment()
-  //         .tz(timeZone)
-  //         .add(1, 'days')
-  //         .startOf('day')
-  //     }
-  //
-  //     // nextCompetitionDate = moment().add(60, 'seconds')
-  //
-  //     if(nextCompetitionDate.diff(moment(), 'minutes') < 1) {
-  //       // Random is important otherwise they just make a new token 1 second before ending, and pumping it with a lot of ONE
-  //       const randomMinutesNumber = getRandomNumberFromInterval(1, 59)
-  //       nextCompetitionDate = nextCompetitionDate.add(randomMinutesNumber, 'minutes')
-  //
-  //       this.logger.log(`Next competition scheduled at ${
-  //         nextCompetitionDate.format('YYYY-MM-DD HH:mm:ss')
-  //       }, ${timeZone} timezone`)
-  //       await this.sleep(nextCompetitionDate.diff(moment(), 'milliseconds'))
-  //       await this.initiateNewCompetition()
-  //     }
   //   } catch (e) {
-  //     this.logger.error(`Failed to schedule next competition start:`, e)
   //   } finally {
-  //     if(schedulerJob) {
-  //       schedulerJob.start()
-  //     }
+  //     job.start();
   //   }
   // }
 
-  async initiateNewCompetition() {
+  // Check competition contract
+  @Cron(CronExpression.EVERY_MINUTE, {
+    name: CompetitionScheduleCheckJob
+  })
+  // @Cron(CronExpression.EVERY_5_SECONDS, {
+  //   name: CompetitionScheduleCheckJob
+  // })
+  async scheduleNextCompetition() {
+    const schedulerJob = this.schedulerRegistry.getCronJob(CompetitionScheduleCheckJob)
+    if(schedulerJob) {
+      schedulerJob.stop()
+    }
+
+    const daysInterval = this.configService.get<number>('COMPETITION_DAYS_INTERVAL')
+    const timeZone = 'America/Los_Angeles'
+    let nextCompetitionDate: Moment
+    let tokenFactoryAddress: string
+    // Competition starts every 7 day at a random time within one hour around midnight
+
+    try {
+      const [prevCompetition] = await this.appService.getCompetitions({ limit: 1 })
+      if(prevCompetition) {
+        const { timestampStart, isCompleted } = prevCompetition
+        tokenFactoryAddress = prevCompetition.tokenFactoryAddress
+
+        const lastCompetitionDeltaMs = moment().diff(moment(timestampStart * 1000))
+        // Interval was exceeded
+        const isIntervalExceeded = lastCompetitionDeltaMs > daysInterval * 24 * 60 * 60 * 1000
+
+        if(isCompleted || isIntervalExceeded) {
+          // Start new competition tomorrow at 00:00
+          nextCompetitionDate = moment()
+            .tz(timeZone)
+            .add(1, 'days')
+            .startOf('day')
+        } else {
+          // Start new competition in 7 days at 00:00
+          nextCompetitionDate = moment(timestampStart * 1000)
+            .tz(timeZone)
+            .add(daysInterval, 'days')
+            .startOf('day')
+        }
+      } else {
+        this.logger.warn(`Previous competition not found in database. New competition will be created.`)
+        // Start new competition tomorrow at 00:00
+        nextCompetitionDate = moment()
+          .tz(timeZone)
+          .add(1, 'days')
+          .startOf('day')
+      }
+
+      // For local testing
+      // nextCompetitionDate = moment().add(5, 'seconds')
+
+      if(nextCompetitionDate.diff(moment(), 'minutes') < 1) {
+        // Random is important otherwise they just make a new token 1 second before ending, and pumping it with a lot of ONE
+        const randomMinutesNumber = getRandomNumberFromInterval(1, 59)
+        // const randomMinutesNumber = 0
+        nextCompetitionDate = nextCompetitionDate.add(randomMinutesNumber, 'minutes')
+
+        this.logger.log(`Next competition scheduled at ${
+          nextCompetitionDate.format('YYYY-MM-DD HH:mm:ss')
+        }, ${timeZone} timezone`)
+        await this.sleep(nextCompetitionDate.diff(moment(), 'milliseconds'))
+        await this.initiateNewCompetition(tokenFactoryAddress)
+      }
+    } catch (e) {
+      this.logger.error(`Failed to schedule next competition start:`, e)
+    } finally {
+      if(schedulerJob) {
+        schedulerJob.start()
+      }
+    }
+  }
+
+  async initiateNewCompetition(tokenFactoryAddress: string) {
     const attemptsCount = 3
+    const tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, tokenFactoryAddress);
     const tokenCollateralThreshold = BigInt(parseUnits(
       this.configService.get<number>('COMPETITION_COLLATERAL_THRESHOLD').toString(), 18
     ))
@@ -713,7 +782,7 @@ export class IndexerService {
     for(let i = 0; i < attemptsCount; i++) {
       try {
         let isCollateralThresholdReached = false
-        const competitionId = await this.getCompetitionId()
+        const competitionId = await this.getCompetitionId(tokenFactoryAddress)
         this.logger.log(`Current competition id=${competitionId}`)
         const tokens = await this.appService.getTokens({
           competitionId: Number(competitionId),
@@ -722,39 +791,40 @@ export class IndexerService {
 
         this.logger.log(`Checking tokens (count=${tokens.length}) for minimum collateral=${tokenCollateralThreshold} wei...`)
         for(const token of tokens) {
-          const collateral = await this.tokenFactoryContract.methods
+          const collateral = await tokenFactoryContract.methods
             .collateralById(competitionId, token.address)
             .call() as bigint
 
           if(collateral >= tokenCollateralThreshold) {
             isCollateralThresholdReached = true
-            this.logger.log(`Token address=${token} received ${collateral} wei in collateral`)
+            this.logger.log(`Token address=${token.address} received ${collateral} wei in collateral`)
             break;
           }
         }
 
         if(isCollateralThresholdReached) {
-          this.logger.log(`Initiate new competition...`)
-          const newCompetitionTxHash = await this.callStartNewCompetitionTx()
-          this.logger.log(`New competition txHash: ${newCompetitionTxHash}`)
+          this.logger.log(`Initiate new competition tokenFactoryAddress=${tokenFactoryAddress} ...`)
+          const newCompetitionTxHash = await this.callStartNewCompetitionTx(tokenFactoryAddress)
+          this.logger.log(`New competition tokenFactoryAddress=${tokenFactoryAddress}, txHash=${newCompetitionTxHash}`)
           await this.sleep(5000)
-          const newCompetitionId = await this.getCompetitionId()
+          const newCompetitionId = await this.getCompetitionId(tokenFactoryAddress)
           this.logger.log(`Started new competition id=${newCompetitionId}; calling token winner...`)
-          const setWinnerHash = await this.setWinnerByCompetitionId(competitionId)
+          const setWinnerHash = await this.setWinnerByCompetitionId(tokenFactoryAddress, competitionId)
           this.logger.log(`setWinnerByCompetitionId called, txnHash=${setWinnerHash}`)
         } else {
-          this.logger.log(`No tokens reached minimum collateral=${tokenCollateralThreshold} wei. Waiting for the next iteration.`)
+          this.logger.log(`tokenFactoryAddress=${tokenFactoryAddress}: No tokens reached minimum collateral=${tokenCollateralThreshold} wei. Waiting for the next iteration.`)
         }
         break;
       } catch (e) {
-        this.logger.warn(`Failed to send setWinner transaction, attempt: ${(i + 1)} / ${attemptsCount}:`, e)
+        this.logger.warn(`tokenFactoryAddress=${tokenFactoryAddress}: failed to send setWinner transaction, attempt: ${(i + 1)} / ${attemptsCount}:`, e)
         await this.sleep(10000)
       }
     }
   }
 
-  private async callStartNewCompetitionTx() {
-    const gasFees = await this.tokenFactoryContract.methods
+  private async callStartNewCompetitionTx(tokenFactoryAddress: string) {
+    const tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, tokenFactoryAddress);
+    const gasFees = await tokenFactoryContract.methods
       .startNewCompetition()
       .estimateGas({ from: this.accountAddress });
 
@@ -762,10 +832,10 @@ export class IndexerService {
 
     const tx = {
       from: this.accountAddress,
-      to: this.configService.get('TOKEN_FACTORY_ADDRESS'),
-      gas: gasFees,
+      to: tokenFactoryAddress,
+      gas: gasFees * 2n,
       gasPrice,
-      data: this.tokenFactoryContract.methods.startNewCompetition().encodeABI(),
+      data: tokenFactoryContract.methods.startNewCompetition().encodeABI(),
     };
 
     const signPromise = await this.web3.eth.accounts.signTransaction(tx, this.configService.get('SERVICE_PRIVATE_KEY'));
@@ -777,8 +847,9 @@ export class IndexerService {
     return sendTxn.transactionHash.toString()
   }
 
-  private async getCompetitionId () {
-    return await this.tokenFactoryContract.methods
+  private async getCompetitionId (tokenFactoryAddress: string) {
+    const tokenFactoryContract = new this.web3.eth.Contract(TokenFactoryABI, tokenFactoryAddress);
+    return await tokenFactoryContract.methods
       .currentCompetitionId()
       .call() as bigint
   }
