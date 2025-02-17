@@ -140,6 +140,11 @@ fly postgres attach pump-fun-backend-staging-db-2 --app pump-fun-backend-staging
 flyctl deploy --ha=false --config fly.staging.toml
 ```
 
+### Generate new database migration
+```shell
+npm run migration:generate --name=Initial
+```
+
 ### Deployments
 
 #### Staging
