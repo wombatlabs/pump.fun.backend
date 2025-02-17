@@ -71,6 +71,7 @@ export class IndexerService {
     this.bootstrap().then(
       (tokenFactories) => {
         this.eventsTrackingLoop(tokenFactories)
+        // this.initiateNewCompetition('')
       }
     )
     this.logger.log(`App service started`)
@@ -119,7 +120,6 @@ export class IndexerService {
   }
 
   private async processSetWinnerEvent(event: EventLog, transactionalEntityManager: EntityManager) {
-    console.log('processSetWinnerEvent', event)
     const txnHash = event.transactionHash.toLowerCase()
     const blockNumber = Number(event.blockNumber)
     const values = event.returnValues

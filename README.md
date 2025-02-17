@@ -117,7 +117,7 @@ create database pump_fun_backend_staging;
 flyctl secrets set TOKEN_FACTORY_ADDRESS=0xEa5CE8534c4a1462C56Ef82a0a82B7770c0c29ea
 flyctl secrets set INDEXER_INITIAL_BLOCK_NUMBER=66615543
 
-flyctl secrets set TOKEN_FACTORY="0x1166665bc13B412Bf49b73bF92acA89A1e1DA448,69332926;0x6D362d144cC8aD63c732E82a849087426EDEEB6f,69334629" --config fly.staging.toml
+flyctl secrets set TOKEN_FACTORY="0xd5e9b7ec8f2e4feB6fab99209fa352ad6DE5D625,69416331;0xCBe0Ca4739282793D65c486c29a929624a0bcA5D,69416376" --config fly.staging.toml
 flyctl secrets set COMPETITION_COLLATERAL_THRESHOLD=0.001 --config fly.staging.toml
 flyctl secrets set COMPETITION_DAYS_INTERVAL=1 --config fly.staging.toml
 ```
