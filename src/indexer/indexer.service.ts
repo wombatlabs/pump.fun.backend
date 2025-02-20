@@ -831,16 +831,16 @@ export class IndexerService {
         }
 
         if(isCollateralThresholdReached) {
-          this.logger.log(`Initiate new competition tokenFactoryAddress=${tokenFactoryAddress} ...`)
+          this.logger.log(`Step 1/3: Initiate new competition tokenFactoryAddress=${tokenFactoryAddress} ...`)
           const newCompetitionTxHash = await this.callStartNewCompetitionTx(tokenFactoryAddress)
           this.logger.log(`New competition tokenFactoryAddress=${tokenFactoryAddress}, txHash=${newCompetitionTxHash}`)
           await this.sleep(5000)
           const newCompetitionId = await this.getCompetitionId(tokenFactoryAddress)
-          this.logger.log(`Started new competition id=${newCompetitionId}; calling token winner...`)
+          this.logger.log(`Step 2/3: Started new competition id=${newCompetitionId}; calling token winner...`)
           const setWinnerHash = await this.setWinnerByCompetitionId(tokenFactoryAddress, competitionId)
-          this.logger.log(`setWinnerByCompetitionId called, txnHash=${setWinnerHash}`)
+          this.logger.log(`Step 3/3: setWinnerByCompetitionId called, txnHash=${setWinnerHash}`)
         } else {
-          this.logger.log(`tokenFactoryAddress=${tokenFactoryAddress}: No tokens reached minimum collateral=${tokenCollateralThreshold} wei. Waiting for the next iteration.`)
+          this.logger.warn(`tokenFactoryAddress=${tokenFactoryAddress}: No tokens reached minimum collateral=${tokenCollateralThreshold} wei. Waiting for the next iteration.`)
         }
         break;
       } catch (e) {
