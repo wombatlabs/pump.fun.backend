@@ -117,23 +117,25 @@ export class IndexerService {
           const currentCompetitionId = await contract.methods
             .currentCompetitionId()
             .call() as bigint
-          if(currentCompetitionId === 1n) {
-            const [initialCompetition] = await this.appService
-              .getCompetitions({ competitionId: Number(currentCompetitionId) })
-            if(!initialCompetition) {
-              const block = await this.web3.eth.getBlock(blockNumber)
-              await this.dataSource.manager.insert(CompetitionEntity, {
-                txnHash: '',
-                blockNumber: blockNumber,
-                tokenFactoryAddress: address.toLowerCase(),
-                competitionId: Number(currentCompetitionId),
-                timestampStart: Number(block.timestamp),
-                timestampEnd: null,
-                isCompleted: false,
-                winnerToken: null,
-              });
-              this.logger.log(`INITIAL NewCompetitionStarted: competitionId=${1}, timestamp=${Number(block.timestamp)}`);
-            }
+
+          const [lastCompetition] = await this.appService.getCompetitions({
+            competitionId: Number(currentCompetitionId),
+            limit: 1
+          })
+          if(!lastCompetition && currentCompetitionId > 0) {
+            const initialCompetitionId = 1
+            const block = await this.web3.eth.getBlock(blockNumber)
+            await this.dataSource.manager.insert(CompetitionEntity, {
+              txnHash: '',
+              blockNumber: blockNumber,
+              tokenFactoryAddress: address.toLowerCase(),
+              competitionId: initialCompetitionId,
+              timestampStart: Number(block.timestamp),
+              timestampEnd: null,
+              isCompleted: false,
+              winnerToken: null,
+            });
+            this.logger.log(`INITIAL NewCompetitionStarted: competitionId=${initialCompetitionId}, timestamp=${Number(block.timestamp)}`);
           }
         } catch (e) {
 
