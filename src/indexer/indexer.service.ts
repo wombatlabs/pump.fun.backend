@@ -125,7 +125,7 @@ export class IndexerService {
               await this.dataSource.manager.insert(CompetitionEntity, {
                 txnHash: '',
                 blockNumber: blockNumber,
-                tokenFactoryAddress: address,
+                tokenFactoryAddress: address.toLowerCase(),
                 competitionId: Number(currentCompetitionId),
                 timestampStart: Number(block.timestamp),
                 timestampEnd: null,
