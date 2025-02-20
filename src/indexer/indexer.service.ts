@@ -110,6 +110,34 @@ export class IndexerService {
         } else {
           this.logger.log(`Bootstrap: existed tokenFactory=${indexerState.name}, blockNumber=${indexerState.blockNumber}`)
         }
+
+        try {
+          // create initial competition id = 1
+          const contract = new this.web3.eth.Contract(TokenFactoryABI, address);
+          const currentCompetitionId = await contract.methods
+            .currentCompetitionId()
+            .call() as bigint
+          if(currentCompetitionId === 1n) {
+            const [initialCompetition] = await this.appService
+              .getCompetitions({ competitionId: Number(currentCompetitionId) })
+            if(!initialCompetition) {
+              const block = await this.web3.eth.getBlock(blockNumber)
+              await this.dataSource.manager.insert(CompetitionEntity, {
+                txnHash: '',
+                blockNumber: blockNumber,
+                tokenFactoryAddress: address,
+                competitionId: Number(currentCompetitionId),
+                timestampStart: Number(block.timestamp),
+                timestampEnd: null,
+                isCompleted: false,
+                winnerToken: null,
+              });
+              this.logger.log(`INITIAL NewCompetitionStarted: competitionId=${1}, timestamp=${Number(block.timestamp)}`);
+            }
+          }
+        } catch (e) {
+
+        }
       }
 
       return tokenFactories
