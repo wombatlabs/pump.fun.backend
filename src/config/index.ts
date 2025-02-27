@@ -32,7 +32,7 @@ export default () => ({
   JWT_PUBLIC_KEY: Buffer.from(process.env.JWT_PUBLIC_KEY || '', 'base64').toString('ascii'),
   RPC_URL: process.env.RPC_URL || 'https://a.api.s0.t.hmny.io',
   RATE_LIMITER_TTL: parseInt(process.env.RATE_LIMITER_TTL) || 60000,
-  RATE_LIMITER_LIMIT: parseInt(process.env.RATE_LIMITER_LIMIT) || 100,
+  RATE_LIMITER_LIMIT: parseInt(process.env.RATE_LIMITER_LIMIT) || 500,
   TOKEN_FACTORY: process.env.TOKEN_FACTORY || '',
   GOOGLE_CLOUD_CONFIG: getGoogleCloudConfig(),
   SERVICE_PRIVATE_KEY: process.env.SERVICE_PRIVATE_KEY || '',
