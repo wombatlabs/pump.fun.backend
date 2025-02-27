@@ -114,12 +114,13 @@ create database pump_fun_backend_staging;
 #### (Optional) Set new env variables
 
 ```shell
-flyctl secrets set TOKEN_FACTORY_ADDRESS=0xEa5CE8534c4a1462C56Ef82a0a82B7770c0c29ea
-flyctl secrets set INDEXER_INITIAL_BLOCK_NUMBER=66615543
+flyctl secrets set TOKEN_FACTORY="0xc115aDA811C5c81f1EafcBe5526d5Fcb73B6b40D,69952745;0x7400bE22b1F3fF409E58738E4cF32290f60b7504,69952955"
+flyctl secrets set COMPETITION_COLLATERAL_THRESHOLD=420000
+flyctl secrets set COMPETITION_DAYS_INTERVAL=7
 
-flyctl secrets set TOKEN_FACTORY="0x50331189a406cd0763EdcCa0c599f5328daFeB04,69663038;0x3C2fdEb2a8c62F41CCC626067D308c0603fd8F34,69665523" --config fly.staging.toml
-flyctl secrets set COMPETITION_COLLATERAL_THRESHOLD=0.01 --config fly.staging.toml
-flyctl secrets set COMPETITION_DAYS_INTERVAL=1 --config fly.staging.toml
+flyctl secrets set TOKEN_FACTORY="0xc115aDA811C5c81f1EafcBe5526d5Fcb73B6b40D,69952745;0x7400bE22b1F3fF409E58738E4cF32290f60b7504,69952955" --config fly.staging.toml
+flyctl secrets set COMPETITION_COLLATERAL_THRESHOLD=420000 --config fly.staging.toml
+flyctl secrets set COMPETITION_DAYS_INTERVAL=7 --config fly.staging.toml
 ```
 
 #### Deploy backend update
@@ -130,40 +131,40 @@ flyctl deploy --ha=false --config fly.staging.toml
 ```
 
 ### How to reattach new database to existed app
+
+#### Production DB
+```shell
+fly postgres detach pump-fun-backend-db
+fly postgres create
+fly postgres attach pump-fun-db --app pump-fun-backend
+flyctl deploy --ha=false
+```
+
+#### Staging DB
 ```shell
 fly postgres detach pump-fun-backend-staging-db --config fly.staging.toml
-
 fly postgres create 
-
 fly postgres attach pump-fun-backend-staging-db-2 --app pump-fun-backend-staging
-
 flyctl deploy --ha=false --config fly.staging.toml
 ```
 
-### Generate new database migration
+### How to generate new database migration
 ```shell
 npm run migration:generate --name=Initial
 ```
 
 ### Deployments
 
-#### Staging
+#### Production
+
+##### .env config
 ```shell
-Competition TokenFactory:
-Token deployed to: 0x24605aadA2E4e2483B8B6097Df64d4E678C1a97E
-BancorBondingCurve deployed to: 0x5fd343cC45B40BD44AACc5b7E7B5D9b3C4651BBC
-NonfungiblePositionManager deployed to: 0x1B01BF64E54Cf024774a062c9DD857889341917A
-TokenFactoryUpgradeable deployed to: 0xd5e9b7ec8f2e4feB6fab99209fa352ad6DE5D625
-Processsing tokenFactory.startNewCompetition:
-Sending tokenFactory.startNewCompetition...
-... Sent! 0xc57081272c413ad50a472ff12de5debdf4d5c56ad09368012f893d198957c12a
-startNewCompetition:  2
+TOKEN_FACTORY=0xc115aDA811C5c81f1EafcBe5526d5Fcb73B6b40D,69952745;0x7400bE22b1F3fF409E58738E4cF32290f60b7504,69952955
 
--------------------------------------------------------------------------------------
+```
 
-TokenFactoryBase:
-Token deployed to: 0xdB7C0e81F9a032B1e94C7d0bBEB16A4BB7c8Ec4a
-BancorBondingCurve deployed to: 0xc93a3092cc8753085Ab60e0F97840B88aC13aa18
-NonfungiblePositionManager deployed to: 0x464B0Ef7640829F71fb5ae0BF0ee1c0632E76E93
-TokenFactoryUpgradeable deployed to: 0xCBe0Ca4739282793D65c486c29a929624a0bcA5D
+##### Deployed contracts:
+```shell
+TokenFactory: 0xc115aDA811C5c81f1EafcBe5526d5Fcb73B6b40D
+TokenFactoryBase: 0x7400bE22b1F3fF409E58738E4cF32290f60b7504
 ```
