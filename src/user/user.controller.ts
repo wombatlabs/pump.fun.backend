@@ -194,7 +194,7 @@ export class UserController {
     }
     const existedUsername = await this.userService.getUserByUsername(dto.username)
     if(existedUsername) {
-      throw new BadRequestException('Username already exist')
+      throw new BadRequestException('Username already exists')
     }
     const updatedUser = await this.userService.updateUser(address, dto);
     this.logger.log(`User ${address} successfully updated: "${JSON.stringify(updatedUser)}"`)
