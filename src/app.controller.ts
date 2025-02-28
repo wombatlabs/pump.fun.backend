@@ -94,7 +94,12 @@ export class AppController {
     if(!req.user) {
       throw new BadRequestException('InvalidJWT')
     }
-    const { address } = plainToInstance(JwtUserAccount, req.user)
+    const { address, isEnabled } = plainToInstance(JwtUserAccount, req.user)
+
+    if(!isEnabled) {
+      throw new ForbiddenException('User is disabled')
+    }
+
     const token = await this.appService.getTokenByAddress(dto.tokenAddress)
     if(!token) {
       throw new NotFoundException('Token not found')
