@@ -43,3 +43,11 @@ export class GetCommentsDto {
   @IsEnum(SortOrder, { message: 'Sort order must be ASC or DESC' })
   sortingOrder?: SortOrder;
 }
+
+export class DeleteUserCommentsDto {
+  @ApiProperty({ type: String, required: false })
+  @Transform((address) => address.value.trim().toLowerCase())
+  @Type(() => String)
+  @IsString()
+  userAddress: string;
+}

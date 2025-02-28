@@ -1,5 +1,5 @@
 import {Injectable, Logger} from '@nestjs/common';
-import {DataSource, EntityManager, LessThan, MoreThan} from "typeorm";
+import {DataSource, EntityManager, In, LessThan, MoreThan} from "typeorm";
 import {
     Comment,
     CompetitionEntity,
@@ -42,6 +42,22 @@ export class AppService {
                 createdAt: sortingOrder
             }
         })
+    }
+
+    async deleteUserComments(userAddress: string){
+        // TODO: refactor with single "delete" query
+        const commentsToDelete = await this.dataSource.manager.find(Comment, {
+            where: {
+                user: {
+                    address: userAddress.toLowerCase()
+                }
+            }
+        })
+        const commentIds = commentsToDelete.map(item => item.id)
+        const res = await this.dataSource.getRepository(Comment).delete({
+            id: In(commentIds)
+        })
+        return res.affected
     }
 
     async getTokens(dto: GetTokensDto){

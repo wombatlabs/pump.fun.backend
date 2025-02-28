@@ -1,9 +1,10 @@
-import {Body, Controller, NotFoundException, Post, UseGuards} from '@nestjs/common';
+import {Body, Controller, Delete, NotFoundException, Post, UseGuards} from '@nestjs/common';
 import {ApiKeyGuard} from "../common/apiKey.guard";
 import {BlacklistDto} from "../dto/blacklist.dto";
 import {AdminService} from "./admin.service";
 import {AppService} from "../app.service";
 import {UserService} from "../user/user.service";
+import {DeleteUserCommentsDto} from "../dto/comment.dto";
 
 @Controller('admin')
 export class AdminController {
@@ -33,5 +34,17 @@ export class AdminController {
     }
 
     throw new NotFoundException("tokenAddress or userAddress not specified");
+  }
+
+  @UseGuards(ApiKeyGuard)
+  @Delete('comments/by-user')
+  async deleteUserComments(@Body() dto: DeleteUserCommentsDto) {
+    const { userAddress } = dto
+
+    if(userAddress) {
+      return await this.appService.deleteUserComments(userAddress)
+    } else {
+      throw new NotFoundException("userAddress is required");
+    }
   }
 }
